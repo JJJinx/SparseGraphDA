@@ -3,19 +3,8 @@ import shutil
 import numpy as np
 
 def dele_fun(data_path,raw_path,name):
-
+    rate = 0.2
     filename = name+'_edgelist.txt'
-    ##判断是否存在删除边后的文件夹，不存在就创建
-    new_path = os.path.join(data_path,'deledge_'+name)
-    new_raw_path = os.path.join(new_path,'raw')
-    isnpExist=os.path.exists(new_path)
-    isnrpExist=os.path.exists(new_raw_path)
-
-    if not isnpExist:
-        os.makedirs(new_path)
-    if not isnrpExist:
-        os.makedirs(new_raw_path)
-    ##
     edge_mat =[]
     with open(os.path.join(raw_path,filename),"r") as f:
         for line in f.readlines():
@@ -23,9 +12,29 @@ def dele_fun(data_path,raw_path,name):
             edge_mat.append(list(map(int,temp)))
     edge_mat = np.array(edge_mat)
     array_len = edge_mat.shape[0]
-    sample_index =  np.sort(np.random.choice(array_len,int(0.2*array_len),False))
+    sample_index =  np.sort(np.random.choice(array_len,int(rate*array_len),False))
+    print('number of edges',len(sample_index))
     sampled_edge_mat = edge_mat[sample_index]
-    np.savetxt(os.path.join(new_raw_path,'deledge_'+name+'_edgelist.txt'),sampled_edge_mat,fmt='%d',delimiter=',')
+
+    ##判断是否存在删除边后的文件夹，不存在就创建
+    new_name = 'del_'+name+str(rate)+'_3'
+    new_path = os.path.join(data_path,new_name)
+    new_raw_path = os.path.join(new_path,'raw')
+    isnpExist=os.path.exists(new_path)
+    isnrpExist=os.path.exists(new_raw_path)
+    if not isnpExist:
+        os.makedirs(new_path)
+    if not isnrpExist:
+        os.makedirs(new_raw_path)
+    ##复制标签文件和节点特征
+    X_source = os.path.join(raw_path,name+'_docs.txt')
+    Y_source = os.path.join(raw_path,name+'_labels.txt')
+    X_target = os.path.join(new_raw_path,new_name+'_docs.txt')
+    Y_target = os.path.join(new_raw_path,new_name+'_labels.txt')
+    shutil.copyfile(X_source,X_target)
+    shutil.copyfile(Y_source,Y_target)
+
+    np.savetxt(os.path.join(new_raw_path,new_name+'_edgelist.txt'),sampled_edge_mat,fmt='%d',delimiter=',')
 
 def classify_and_del_edge(input_list):
     '''
@@ -99,18 +108,16 @@ def classify_and_del_edge(input_list):
 if __name__ == "__main__":
     root = os.getcwd()
     data_path = os.path.join(root,'data')
-    #acmfname = 'acm_edgelist.txt'           # 22270条边
-    #dblpfname = 'dblp_edgelist.txt'         # 14682条边 选取0.2以后就是2936左右的边数
     choice = 'dblp'
     if choice == 'acm':
         acm_path = os.path.join(data_path,'acm')
         acm_raw_path = os.path.join(acm_path,'raw')
-        #dele_fun(data_path,acm_raw_path,'acm')
-        input_list = [data_path,acm_raw_path,'acm']
-        classify_and_del_edge(input_list)
+        dele_fun(data_path,acm_raw_path,'acm')
+        #input_list = [data_path,acm_raw_path,'acm']
+        #classify_and_del_edge(input_list)
     if choice == 'dblp':
         dblp_path = os.path.join(data_path,'dblp')
         dblp_raw_path = os.path.join(dblp_path,'raw')
-        #dele_fun(data_path,dblp_raw_path,'dblp')
-        input_list = [data_path,dblp_raw_path,'dblp']
-        classify_and_del_edge(input_list)
+        dele_fun(data_path,dblp_raw_path,'dblp')
+        #input_list = [data_path,dblp_raw_path,'dblp']
+        #classify_and_del_edge(input_list)

@@ -55,13 +55,14 @@ if __name__ == "__main__":
     deledge_acmfname = 'deledge_acm_edgelist.txt'
     deledge_dblpfname = 'deledge_dblp_edgelist.txt'
     # ratio del
-    ratiodel_acm_path = os.path.join(data_path,'ratiodel_acm')
+    add_item = '0.2_1'
+    ratiodel_acm_path = os.path.join(data_path,'ratiodel_acm'+add_item)
     ratiodel_acm_raw_path = os.path.join(ratiodel_acm_path,'raw')
-    ratiodel_dblp_path = os.path.join(data_path,'ratiodel_dblp')
+    ratiodel_dblp_path = os.path.join(data_path,'ratiodel_dblp'+add_item)
     ratiodel_dblp_raw_path = os.path.join(ratiodel_dblp_path,'raw')
 
-    ratiodel_acmfname = 'ratiodel_acm_edgelist.txt'
-    ratiodel_dblpfname = 'ratiodel_dblp_edgelist.txt'
+    ratiodel_acmfname = 'ratiodel_acm'+add_item+'_edgelist.txt'
+    ratiodel_dblpfname = 'ratiodel_dblp'+add_item+'_edgelist.txt'
 
-    draw_hist(del_dblp_raw_path,deledge_dblpfname)
+    draw_hist(ratiodel_dblp_raw_path,ratiodel_dblpfname)
 

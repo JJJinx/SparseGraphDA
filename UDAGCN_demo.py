@@ -14,16 +14,16 @@ from torch import nn
 import torch.nn.functional as F
 import itertools
 
-from torch.utils.tensorboard import SummaryWriter
-data_path = os.path.join(os.getcwd(),'datastastic')
-logfilename = 'DBLP2ACM0.2(3)'+'_log'
-writer = SummaryWriter(os.path.join(data_path,logfilename))
+# from torch.utils.tensorboard import SummaryWriter
+# data_path = os.path.join(os.getcwd(),'datastastic')
+# logfilename = 'ACMd0.2(1)2DBLPrd0.2(3)'+'_log'
+# writer = SummaryWriter(os.path.join(data_path,logfilename))
 
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument("--source", type=str, default='dblp')
-parser.add_argument("--target", type=str, default='ratiodel_acm0.2_3')
+parser.add_argument("--source", type=str, default='ratiodel_dblp0.2_3')
+parser.add_argument("--target", type=str, default='del_acm0.2_1')
 parser.add_argument("--name", type=str, default='UDAGCN')
 parser.add_argument("--seed", type=int,default=200)
 parser.add_argument("--UDAGCN", type=bool,default=True)
@@ -263,8 +263,8 @@ for epoch in range(1, epochs):
     train(epoch)
     source_correct = test(source_data, "source", source_data.test_mask)
     target_correct = test(target_data, "target")
-    writer.add_scalars('ACC', { 'src ACC': source_correct,'tgt ACC': target_correct}, epoch)
-    writer.flush()
+    # writer.add_scalars('ACC', { 'src ACC': source_correct,'tgt ACC': target_correct}, epoch)
+    # writer.flush()
     print("Epoch: {}, source_acc: {}, target_acc: {}".format(epoch, source_correct, target_correct))
     if target_correct > best_target_acc:
         best_target_acc = target_correct
@@ -275,6 +275,6 @@ line = "{} - Epoch: {}, best_source_acc: {}, best_target_acc: {}"\
     .format(id, best_epoch, best_source_acc, best_target_acc)
 print(line)
 
-writer.close()
+# writer.close()
 
 
