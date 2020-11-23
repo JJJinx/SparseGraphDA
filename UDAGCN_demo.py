@@ -4,15 +4,16 @@ print(torch.cuda.is_available())
 
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-from argparse import ArgumentParser
-from dual_gnn.cached_gcn_conv import CachedGCNConv
-from dual_gnn.dataset.DomainData import DomainData
-from dual_gnn.ppmi_conv import PPMIConv
 import random
 import numpy as np
 from torch import nn
 import torch.nn.functional as F
 import itertools
+from argparse import ArgumentParser
+from dual_gnn.cached_gcn_conv import CachedGCNConv
+from dataset.DomainData import DomainData
+from dual_gnn.ppmi_conv import PPMIConv
+from data_vis import degree_level_acc
 
 # from torch.utils.tensorboard import SummaryWriter
 # data_path = os.path.join(os.getcwd(),'datastastic')
@@ -22,18 +23,20 @@ import itertools
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument("--source", type=str, default='ratiodel_dblp0.2_3')
-parser.add_argument("--target", type=str, default='del_acm0.2_1')
+parser.add_argument("--source", type=str, default='dblp')
+parser.add_argument("--target", type=str, default='ratiodel_acm0.2_1')
 parser.add_argument("--name", type=str, default='UDAGCN')
 parser.add_argument("--seed", type=int,default=200)
 parser.add_argument("--UDAGCN", type=bool,default=True)
 parser.add_argument("--encoder_dim", type=int, default=16)
+parser.add_argument("--transfer", type=bool, default=False)
 
 
 args = parser.parse_args()
 seed = args.seed
 use_UDAGCN = args.UDAGCN
 encoder_dim = args.encoder_dim
+transfer = args.transfer
 
 
 
@@ -43,6 +46,7 @@ id = "source: {}, target: {}, seed: {}, UDAGCN: {}, encoder_dim: {}"\
 print(id)
 
 rate = 0.0
+#要固定输出后两个需要；即np控制mask，而torch控制模型初始参数
 # random.seed(seed)
 # np.random.seed(seed)
 # torch.manual_seed(seed)
@@ -52,7 +56,6 @@ print(source_data)
 dataset = DomainData("data/{}".format(args.target), name=args.target)
 target_data = dataset[0]
 print(target_data)
-
 
 source_data = source_data.to(device)
 target_data = target_data.to(device)
@@ -148,7 +151,9 @@ class Attention(nn.Module):
 
 att_model = Attention(encoder_dim).cuda()
 
-models = [encoder, cls_model, domain_model]
+models = [encoder, cls_model]
+if transfer:
+    models.extend([domain_model])
 if use_UDAGCN:
     models.extend([ppmi_encoder, att_model])
 params = itertools.chain(*[model.parameters() for model in models])
@@ -223,7 +228,7 @@ def train(epoch):
             if "weight" in name:
                 cls_loss = cls_loss + param.mean() * 3e-3
 
-    if use_UDAGCN:
+    if transfer:
         # use domain classifier loss:
         source_domain_preds = domain_model(encoded_source)
         target_domain_preds = domain_model(encoded_target)
@@ -247,10 +252,16 @@ def train(epoch):
         loss_entropy = torch.mean(torch.sum(-target_probs * torch.log(target_probs), dim=-1))
 
         loss = loss + loss_entropy* (epoch / epochs * 0.01)
-
-
+        
     else:
-        loss = cls_loss
+        #use target classifier loss:
+        target_logits = cls_model(encoded_target)
+        target_probs = F.softmax(target_logits, dim=-1)
+        target_probs = torch.clamp(target_probs, min=1e-9, max=1.0)
+
+        loss_entropy = torch.mean(torch.sum(-target_probs * torch.log(target_probs), dim=-1))
+        loss = cls_loss+loss_entropy* (epoch / epochs * 0.01)
+        # loss = cls_loss
 
     optimizer.zero_grad()
     loss.backward()
@@ -270,11 +281,31 @@ for epoch in range(1, epochs):
         best_target_acc = target_correct
         best_source_acc = source_correct
         best_epoch = epoch
+#创建文件夹
+data_vis_path = './datastastic/degree_related_acc/{}2{}noda/'.format(args.source,args.target)
+isnrpExist=os.path.exists(data_vis_path)
+# print(isnrpExist,data_vis_path)
+# raise RuntimeError
+if not isnrpExist:
+    os.makedirs(data_vis_path)
+#对于源域的节点级别的度相关性分析
+for model in models:
+    model.eval()
+encoded_output = encode(source_data, 'source', source_data.test_mask)
+logits = cls_model(encoded_output)
+preds = logits.argmax(dim=1)
+degree_level_acc("data/{}/raw".format(args.source),args.source,preds,source_data.y,\
+    savefig_path=os.path.join(data_vis_path+'{}.png'.format(args.source)),mask=source_data.test_mask)
+#对于目标域的节点级别的度相关性分析
+for model in models:
+    model.eval()
+encoded_output = encode(target_data, 'target')
+logits = cls_model(encoded_output)
+preds = logits.argmax(dim=1)
+degree_level_acc("data/{}/raw".format(args.target),args.target,preds,target_data.y,\
+    savefig_path=os.path.join(data_vis_path+'{}.png'.format(args.target)))
 print("=============================================================")
 line = "{} - Epoch: {}, best_source_acc: {}, best_target_acc: {}"\
     .format(id, best_epoch, best_source_acc, best_target_acc)
 print(line)
-
 # writer.close()
-
-
