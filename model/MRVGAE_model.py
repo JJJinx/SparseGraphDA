@@ -17,7 +17,7 @@ class VI(nn.Module):
             #变分分布为伯努利分布
             self.mlp_p = nn.Linear(in_dim,out_dim)
 
-    def forward(self,H)
+    def forward(self,H):
         if self.type == 'Norm':
             mean = self.mlp_mean(H)
             logstd = self.mlp_logstd(H)
@@ -40,7 +40,7 @@ class private_encoder(nn.Module):
 
 class shared_encoder(nn.Module):
     def __init__(self,in_dim,out_dim,**kwargs):
-        super(private_encoder,self).__init__()
+        super(shared_encoder,self).__init__()
         self.gcn = CachedGCNConv(in_dim, out_dim,**kwargs)
     def forward(self,x,adj):
         x = self.gcn(x, adj)
@@ -50,9 +50,11 @@ class shared_decoder(nn.Module):
     def __init__(self,in_dim,out_dim):
         super(shared_decoder,self).__init__()
         self.mlp = nn.Linear(in_dim,out_dim)
+        self.relu = nn.ReLU()
         self.dropout_layers = nn.Dropout(0.1)
     def forward(self,x):
         x = self.mlp(x)
+        x = self.relu(x)
         x = self.dropout_layers(x)
         return x 
             
@@ -60,23 +62,26 @@ class private_decoder(nn.Module):
     def __init__(self,in_dim,out_dim):
         super(private_decoder,self).__init__()
         self.mlp = nn.Linear(in_dim,out_dim)
+        self.sm = nn.Sigmoid()
     def forward(self,x):
         x = self.mlp(x)
+        x = self.sm(x)
         return x
 
 
-class R_classifier():
-    def __init__():
-        super(private_decoder,self).__init__()
+class R_classifier(nn.Module):
+    def __init__(self):
+        super(R_classifier,self).__init__()
         pass
-    def forward():
+    def forward(self):
         pass
 
 
-class discriminator():
-    def __init__():
+class discriminator(nn.Module):
+    def __init__(self):
+        super(discriminator,self).__init__()
         pass
-    def forward():
+    def forward(self):
         pass
 
 
