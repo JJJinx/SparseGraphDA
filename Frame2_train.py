@@ -57,7 +57,7 @@ class VGAE(torch.nn.Module):
         x = self.private_encoder(x,edge_index) 
         h = self.shared_encoder(x,edge_index)
         hj = h.unsqueeze(0).repeat(h.shape[0],1,1) #[N_i,N_j,Dh],向量值仅和j相关
-        hi = h.unsqueeze(1),repeat(1,h.shape[0],1) #[N_i,N_j,Dh],向量值仅和i相关
+        hi = h.unsqueeze(1).repeat(1,h.shape[0],1) #[N_i,N_j,Dh],向量值仅和i相关
         hij = torch.cat((hi,hj),2)
         # h = torch.mm(h,h.T)*hij #向量乘后元素乘
         z = self.VI(hij)

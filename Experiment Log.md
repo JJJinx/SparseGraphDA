@@ -52,6 +52,26 @@ DBLP_RD0.8(即 ratiodel_dblp0.x_x)：11739
 
 * 针对节点对的VGAE自编码器效果
 
+  效果上来说
+
+  MRVGAE test_roc= 0.70311 test_ap= 0.70560  hid = [64,32 32,8]
+
+  ​				求和的方式 test_roc= 0.71255 test_ap= 0.72889 hid = [64,32 32,8]
+
+  VGAE   test_roc= 0.92175 test_ap= 0.93952  hid = [64,32]  后者的话隐层的大小对于其效果不会有很大影响，但是前者增大隐层会提升性能
+
+  改变拼接为加和然后增大隐层（原始的VGAE无法预测有向图的边，因为调换乘法前后的顺序不影响结果，但是concat具有这样的潜能）
+
+* 理解代码里是如何进行连接性测试的
+
+
+
+* 验证双路重建的效果
+
+
+
+* 验证加入adv 损失后的分类效果
+
 
 
 
@@ -64,8 +84,6 @@ DBLP_RD0.8(即 ratiodel_dblp0.x_x)：11739
 
 meta-relation的定义   <s,e,t>三元组，考虑到文章所处理的问题中，边不包含feature且仅有一类边，故该三元组可以表示为<s,t>
 
-
-
 ## 框图的解释
 
 #### F1
@@ -74,21 +92,13 @@ meta-relation的定义   <s,e,t>三元组，考虑到文章所处理的问题中
 
 对于$\mu*\mu^{T},\sigma*\sigma^{T}$的正态约束应当是N维的，N为节点个数
 
-
-
 #### F2
 
 对于所有节点对，由于其重建结果是对于A和X的观察，所以隐变量中的节点对的分布可以是高斯分布；但是这样做的结果很可能是重建的图连接性很差，即成对节点很多但是缺少联通的路径；分类器的标签为节点对的标签
 
-
-
 #### F3
 
 每个节点对的伯努利分布的p都不相同，然后每个节点对的分布都是高维空间中以p为参数的高维伯努利分布；分类器的标签为节点对的类别
-
-
-
-
 
 ## Note
 
@@ -98,43 +108,61 @@ meta-relation的定义   <s,e,t>三元组，考虑到文章所处理的问题中
 >
 > 一个是task上的cycle，也就是用$X_{ST}$得到的中间隐变量$Z_{ST}$的分类结果（用原本S域的标签）
 
-
-
 VGAE中使用CE损失来为每个节点对之间边的存在性进行判定
-
-
 
 * 如何考虑引入PPMI，在VGAE中引入？
 
-
-
 * 是否有必要去考虑节点在网络中的position对于链接预测的影响，特别是在目标域连接很稀疏的时候？还有就是解码时的置换不变性？
 
-
-
-* 换一个思路，目标域连接性不稀疏，使用VGAE增加来自源域的解码器生成的边，是否会增加效果？
-
-
-
-
-
 * 判断连接时应当加入sparsity的考虑，也就是由于邻接矩阵非常稀疏导致正负样本失衡的问题，Loss中给正样本较大权重之类的；准确的说对源域是使用正负样本的思路，而对目标域则要引入低秩约束
-
-
 
 * 如何处理源域和目标域节点数量不同的情况
 
 >  节点对的形式可以处理，但这样就不能再使用图卷积了
 
+* 实际上我们的观测值是A和X，由于A是0，1的值选一个（不能认为中间的NxNx2D是观测值），所以只能使用Gumbel分布，而不是高斯分布作为一个先验；
+
+  换个思路就是观察值为A*concat(Xi,Xj)，这样就比较好使用高斯去做变分,但这样网络参数极大，须要用batch了（或者使用上采样卷积）
+
+  支路1：Gumbel分布如何进行重参数
+
+  ​	
+
+  支路2：用AX的重建，如何减少运算复杂度=卷积上采样操作，batch操作
+
+* 如果按照现有的方法实际上做的就是先做link prediction在做node classification，那为什么不用其他的baseline做link prediction后再做node prediction试一试呢，就实验里应该有这个，就是baseline不做link prediction那么模型本身也就不应该做；
+
+  换一个思路，目标域连接性不稀疏，使用VGAE增加来自源域的解码器生成的边，是否会增加效果？
+
+* 离散的变分应该用GUMBEL分布
 
 
-* 实际上我们的观测值是A和X，由于A是0，1的值选一个（不能认为中间的NxNx2D是观测值），所以只能使用伯努利分布，而不是高斯分布作为一个先验；但是伯努利分布地话如何使用重参数
+
+* Loss应该要换掉，换成FOCAL loss 现有的这种无法对负类做出约束；但是实际上要做的是细分边的种类
 
 
 
-* 如果按照现有的方法实际上做的就是先做link prediction在做node classification，那为什么不用其他的baseline做link prediction后再做node prediction试一试呢，就实验里应该有这个，就是baseline不做link prediction那么模型本身也就不应该做
+* 关于DGL的子图采样
 
+  https://archwalker.github.io/blog/2019/07/07/GNN-Framework-DGL-NodeFlow.html
 
+  运行中会采出一个pos_graph和neg_graph，以及一个dst_node集合；其中pos_graph是dst_node的positive边集（即实际存在），neg_graph则反之；而在计算中为了求出dst_node的hidden embedding，就需要其邻居的参与，而对于两层的GCN则需要二跳邻居来更新一跳邻居的hidden embedding，这在代码中就体现为两个block，第一个block用于更新一跳邻居，第二个block用于更新dst_node,这样子网络最后的输出就是dst_node的embedding。
+
+  此外对于函数subgraph.apply_edges(dgl.function.u_dot_v('x', 'x', 'score'))，虽然看起来是求了所有节点对的分数score，但是实际上只会给subgraph中存在的边添加属性
+  
+* 为什么会DA效果下降，从acm2dblp和acm2del_dblp0.2_1的degree_related_acc的图片来看，主要原因是1.度为0的节点大大增加2.度为1的节点准确率大大下降（0.6->0.4）
+
+  <img src="images/image-20201209182658263.png" alt="image-20201209182658263"  />
+
+  del_dblp
+
+  ![image-20201209182741851](images/image-20201209182741851.png)
+
+  dblp
+
+  
+
+  
 
 ## TODO
 
@@ -144,12 +172,10 @@ VGAE中使用CE损失来为每个节点对之间边的存在性进行判定
 
 - [ ] 查一下一般的训练设置(是取最后还是取最好的)
 
-- [ ] 去除PPMI再进行实验
-
-- [ ] 无迁移直接应用VGAE模型，查看在目标域上的效果如何
-
 - [x] 查阅cross_domain的相关文献
 
 - [x] VGAE的相关文献
+
+- [ ] ppt中相关公式修改
 
   

@@ -61,7 +61,6 @@ source_data = source_data.to(device)
 target_data = target_data.to(device)
 
 
-
 class GNN(torch.nn.Module):
     def __init__(self, base_model=None, type="gcn", **kwargs):
         super(GNN, self).__init__()
