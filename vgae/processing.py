@@ -96,21 +96,23 @@ def mask_test_edges(adj):
 
     raise RuntimeError
 
-def neg_sampling(pos_nodepair,graph):
+def neg_sampling(train_pos_nodepair,val_pos_nodepair,graph):
     num_node = graph.nodes().shape[0]
     val_neg_nodepair = []
 
-    def ismember(a, b, tol=5): # check whether a is member of b
+    def ismember(a, b, tol=5): # check whether a is member of b TODO
+        # a :: a list
+        # b :: a tensor
         rows_close = np.all(np.round(a - b[:, None], tol) == 0, axis=-1)
         return np.any(rows_close)
-    while len(val_neg_nodepair)<pos_nodepair.shape[1]:
+    while len(val_neg_nodepair)<val_pos_nodepair.shape[1]:
         idx_i = np.random.randint(0, num_node)
         idx_j = np.random.randint(0, num_node)
         if idx_i == idx_j:
             continue
-        if ismember([idx_i, idx_j], edges_all):
+        if ismember([idx_i, idx_j], train_pos_nodepair):
             continue
-        if ismember([idx_j, idx_i], edges_all):
+        if ismember([idx_j, idx_i], train_pos_nodepair):
             continue
         if ismember([idx_i, idx_j], val_pos_nodepair):
             continue
@@ -170,6 +172,8 @@ def data_process(graph):
     val_edges_src = val_g.edges()[0]
     val_edges_dst = val_g.edges()[1]
     val_pos_nodepair = torch.vstack([val_edges_src,val_edges_dst]) # torch tensor
+    print(val_pos_nodepair)
+    raise RuntimeError
     #val_neg_nodepair = neg_sampling(val_g)
     
     # build test_g
