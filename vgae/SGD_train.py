@@ -93,7 +93,7 @@ if __name__ == "__main__":
     dataset = dgl.data.CoraGraphDataset()
     #graph = dataset.graph
     graph = dataset[0]
-    train_g,val_pos_nodepair,val_neg_nodepair,test_pos_nodepair,test_neg_nodepair = data_process(graph)
+    train_g,val_pos_graph,val_neg_graph,test_pos_graph,test_neg_graph = data_process(graph)
     model = SGD_MRVGAE(args.input_dim,args.n_hidden,args.input_dim,args.device,distype='Both',categorical_dim=args.categorical_dim).to(device) 
     predictor = ScorePredictor().to(device)
     opt = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()))

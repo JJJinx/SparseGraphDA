@@ -131,6 +131,7 @@ def neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph):
             if ismember([idx_i, idx_j], np.array(val_neg_nodepair)):
                 continue
         val_neg_nodepair.append([idx_i, idx_j])
+    val_neg_nodepair = torch.tensor(val_neg_nodepair)
     ## for test neg 
     test_neg_nodepair = []
     while len(test_neg_nodepair)<test_pos_nodepair.shape[0]:
@@ -156,6 +157,7 @@ def neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph):
             if ismember([idx_i, idx_j], np.array(test_neg_nodepair)):
                 continue
         test_neg_nodepair.append([idx_i, idx_j])
+    test_neg_nodepair = torch.tensor(test_neg_nodepair)
     return val_neg_nodepair,test_neg_nodepair
 
 def data_process(graph):
@@ -200,24 +202,27 @@ def data_process(graph):
     train_pos_nodepair = torch.vstack([train_edges_src,train_edges_dst]).numpy().T # array,not include self-loop
     #add self-loop edge
     train_g = dgl.add_self_loop(train_g)
-    #build val_g
+    #build val_pos_graph
     val_edges = val_set
-    val_g = graph.edge_subgraph(val_edges,preserve_nodes=True)
-    val_edges_src = val_g.edges()[0]
-    val_edges_dst = val_g.edges()[1]
+    val_pos_graph = graph.edge_subgraph(val_edges,preserve_nodes=True)
+    val_edges_src = val_pos_graph.edges()[0]
+    val_edges_dst = val_pos_graph.edges()[1]
     val_pos_nodepair = torch.vstack([val_edges_src,val_edges_dst]).numpy().T # array 应该是单向边
-    # build test_g
+    # build test_pos_graph
     test_edges = test_set
-    test_g = graph.edge_subgraph(test_edges,preserve_nodes=True)
-    test_edges_src = test_g.edges()[0]
-    test_edges_dst = test_g.edges()[1]
+    test_pos_graph = graph.edge_subgraph(test_edges,preserve_nodes=True)
+    test_edges_src = test_pos_graph.edges()[0]
+    test_edges_dst = test_pos_graph.edges()[1]
     test_pos_nodepair = torch.vstack([test_edges_src,test_edges_dst]).numpy().T # array
     ### 负采样的方法就是给定首尾节点的idx，然后确定在节点对(graph.edges())中不存在即可以认为是合适的负样本
     val_neg_nodepair,test_neg_nodepair = neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph)
     ## 得到负样本对后为val和test都生成neg subgraph
+    edges = torch.arange(graph.number_of_edges())
     val_neg_graph = graph
-    
-    print(val_neg_graph.remove_edges())
-    raise RuntimeError
+    val_neg_graph.remove_edges(edges)
+    val_neg_graph = dgl.add_edges(val_neg_graph,val_neg_nodepair.T[0],val_neg_nodepair.T[1])
+    test_neg_graph = graph
+    test_neg_graph.remove_edges(edges)
+    test_neg_graph = dgl.add_edges(test_neg_graph,test_neg_nodepair.T[0],test_neg_nodepair.T[1])
 
-    return train_g,val_pos_nodepair,val_neg_nodepair,test_pos_nodepair,test_neg_nodepair
+    return train_g,val_pos_graph,val_neg_graph,test_pos_graph,test_neg_graph
