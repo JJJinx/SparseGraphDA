@@ -44,13 +44,74 @@ class SGD_MRVGAE(nn.Module):
             self.dec_mlpA = nn.Linear(n_hidden[4],1)
             self.dec_mlpX = nn.Linear(n_hidden[4],out_feats)
     
-    def inference(self,graph,x,temp):
+    def inference(self,graph,pos_graph,neg_graph,x,temp):
+        '''
+            model:: the trained model
+            graph:: train graph
+            input_features:: all node features
+            pos_nodepair:: graph that regards the pos nodepair as edges  TODO
+            neg_nodepair:: graph that regards the neg nodepair as edges  TODO
+        '''
         ## encode
         h = self.enc_gcn[0](graph,x)
         h = self.enc_gcn[1](graph,h)
-        #TODO 是采一个正样本图和一个负样本图来作计算
-        #TODO 还是把所有的节点对都算出来后算损失
+        #TODO 采一个正样本图和一个负样本图来作计算
+        pos_graph.ndata['h'] = h
+        pos_graph.apply_edges(dgl.function.u_add_v('h', 'h', 'npair_emb')) 
+        pos_npemb = pos_graph.edata['npair_emb']
+        neg_graph.ndata['h'] = h
+        neg_graph.apply_edges(dgl.function.u_add_v('h', 'h', 'npair_emb')) 
+        neg_npemb = neg_graph.edata['npair_emb']
+        ## variation inference
+        if self.distype=='Rel':
+            pass
+        if self.distype=='Both':
+            ## for pos graph
+            pos_mean = self.vi_mlp_mean(pos_npemb)  # [pos,dn*cat_dim]
+            pos_logstd = self.vi_mlp_logstd(pos_npemb)
+            gausian_noise = torch.randn(pos_mean.size(0),pos_mean.size(1)).to(self.device)
+            posN = gausian_noise*torch.exp(pos_logstd) + pos_mean   # [pos,dn*cat_dim]
+            posN = posN.view(pos_npemb.shape[0],self.cat,-1) #[pos,cat_dim,dN]
 
+            posq = self.vi_q(pos_npemb) #shape [pos,cat_dim]
+            eps = 1e-7
+            uniform = torch.rand_like(posq) # shape[pos,cat_dim] sample from uniform distribution
+            gumbel = -torch.log(-torch.log(uniform+eps)+eps)  
+            posZ = nn.functional.softmax((posq+gumbel)/temp,dim=-1) # shape [pos,catdim]
+            posZ = posZ.view(-1,1,self.cat)  # [pos,1,cat_dim]
+            posM = torch.matmul(posZ,posN).squeeze() #[pos,dn]  
+            ## for neg graph
+            neg_mean = self.vi_mlp_mean(neg_npemb)
+            neg_logstd = self.vi_mlp_logstd(neg_npemb)
+            gausian_noise = torch.randn(neg_mean.size(0),neg_mean.size(1)).to(self.device)
+            negN = gausian_noise*torch.exp(neg_logstd) + neg_mean   # [neg,dn*cat_dim]
+            negN = negN.view(neg_npemb.shape[0],self.cat,-1) #[neg,cat_dim,dN]
+
+            negq = self.vi_q(neg_npemb) #shape [neg,cat_dim]
+            eps = 1e-7
+            uniform = torch.rand_like(negq) # shape[neg,cat_dim] sample from uniform distribution
+            gumbel = -torch.log(-torch.log(uniform+eps)+eps)  
+            negZ = nn.functional.softmax((negq+gumbel)/temp,dim=-1) # shape [neg,catdim]
+            negZ = negZ.view(-1,1,self.cat)  # [neg,1,cat_dim]
+
+            negM = torch.matmul(negZ,negN).squeeze() #[neg,dn]  
+        # decode
+        ## for pos graph
+        a = self.dec_mlp1(posM)
+        a = self.relu(a)
+        posA = self.dec_mlpA(a)
+        posA = self.sigmoid(posA)
+        posX = self.dec_mlpX(a)
+        posX = self.relu(posX)
+        ## for neg graph
+        a = self.dec_mlp1(negM)
+        a = self.relu(a)
+        negA = self.dec_mlpA(a)
+        negA = self.sigmoid(negA)
+        negX = self.dec_mlpX(a)
+        negX = self.relu(negX)
+
+        return None
 
     def forward(self, blocks, x,pos_graph,neg_graph,temp):
         h = x

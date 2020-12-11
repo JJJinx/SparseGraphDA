@@ -96,16 +96,23 @@ def mask_test_edges(adj):
 
     raise RuntimeError
 
-def neg_sampling(train_pos_nodepair,val_pos_nodepair,graph):
+def neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph):
     num_node = graph.nodes().shape[0]
     val_neg_nodepair = []
-
-    def ismember(a, b, tol=5): # check whether a is member of b TODO
+    def ismember(a, b, tol=5): # check whether a is member of b 
         # a :: a list
-        # b :: a tensor
-        rows_close = np.all(np.round(a - b[:, None], tol) == 0, axis=-1)
+        # b :: a array
+        ##for test
+        # a = np.array([1,2])
+        # b = np.array([[2,3],[1,2],[0,0]]).T
+        # print((np.array(a) - b.T))
+        # print(np.all(np.round(np.array(a) - b.T)==0,axis=1))
+        # print(np.any(np.all(np.round(np.array(a) - b.T)==0,axis=1)))
+        # raise RuntimeError
+        rows_close = np.all(np.round(np.array(a) - b, tol) == 0, axis=1)
         return np.any(rows_close)
-    while len(val_neg_nodepair)<val_pos_nodepair.shape[1]:
+    ## for val neg
+    while len(val_neg_nodepair)<val_pos_nodepair.shape[0]:
         idx_i = np.random.randint(0, num_node)
         idx_j = np.random.randint(0, num_node)
         if idx_i == idx_j:
@@ -124,8 +131,32 @@ def neg_sampling(train_pos_nodepair,val_pos_nodepair,graph):
             if ismember([idx_i, idx_j], np.array(val_neg_nodepair)):
                 continue
         val_neg_nodepair.append([idx_i, idx_j])
-    
-    return None
+    ## for test neg 
+    test_neg_nodepair = []
+    while len(test_neg_nodepair)<test_pos_nodepair.shape[0]:
+        idx_i = np.random.randint(0, num_node)
+        idx_j = np.random.randint(0, num_node)
+        if idx_i == idx_j:
+            continue
+        if ismember([idx_i, idx_j], train_pos_nodepair):
+            continue
+        if ismember([idx_j, idx_i], train_pos_nodepair):
+            continue
+        if ismember([idx_i, idx_j], val_pos_nodepair):
+            continue
+        if ismember([idx_j, idx_i], val_pos_nodepair):
+            continue
+        if ismember([idx_i, idx_j], test_pos_nodepair):
+            continue
+        if ismember([idx_j, idx_i], test_pos_nodepair):
+            continue        
+        if test_neg_nodepair:
+            if ismember([idx_j, idx_i], np.array(test_neg_nodepair)):
+                continue
+            if ismember([idx_i, idx_j], np.array(test_neg_nodepair)):
+                continue
+        test_neg_nodepair.append([idx_i, idx_j])
+    return val_neg_nodepair,test_neg_nodepair
 
 def data_process(graph):
     # train pos edges::graph形式 用于训练与inference阶段的推断
@@ -164,6 +195,9 @@ def data_process(graph):
     #build train_g
     train_edges = train_set
     train_g = graph.edge_subgraph(train_edges,preserve_nodes=True)
+    train_edges_src = train_g.edges()[0]
+    train_edges_dst = train_g.edges()[1]
+    train_pos_nodepair = torch.vstack([train_edges_src,train_edges_dst]).numpy().T # array,not include self-loop
     #add self-loop edge
     train_g = dgl.add_self_loop(train_g)
     #build val_g
@@ -171,16 +205,19 @@ def data_process(graph):
     val_g = graph.edge_subgraph(val_edges,preserve_nodes=True)
     val_edges_src = val_g.edges()[0]
     val_edges_dst = val_g.edges()[1]
-    val_pos_nodepair = torch.vstack([val_edges_src,val_edges_dst]) # torch tensor
-    print(val_pos_nodepair)
-    raise RuntimeError
-    #val_neg_nodepair = neg_sampling(val_g)
-    
+    val_pos_nodepair = torch.vstack([val_edges_src,val_edges_dst]).numpy().T # array 应该是单向边
     # build test_g
     test_edges = test_set
     test_g = graph.edge_subgraph(test_edges,preserve_nodes=True)
     test_edges_src = test_g.edges()[0]
     test_edges_dst = test_g.edges()[1]
-    test_pos_nodepair = torch.vstack([test_edges_src,test_edges_dst]) # torch tensor
+    test_pos_nodepair = torch.vstack([test_edges_src,test_edges_dst]).numpy().T # array
     ### 负采样的方法就是给定首尾节点的idx，然后确定在节点对(graph.edges())中不存在即可以认为是合适的负样本
+    val_neg_nodepair,test_neg_nodepair = neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph)
+    ## 得到负样本对后为val和test都生成neg subgraph
+    val_neg_graph = graph
+    
+    print(val_neg_graph.remove_edges())
+    raise RuntimeError
 
+    return train_g,val_pos_nodepair,val_neg_nodepair,test_pos_nodepair,test_neg_nodepair

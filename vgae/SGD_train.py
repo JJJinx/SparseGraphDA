@@ -19,40 +19,6 @@ import args
 from processing import *
 from model import SGD_MRVGAE,ScorePredictor
 
-def inference(model, graph, input_features, batch_size):
-    '''
-        graph:: validation graph
-
-    '''
-    nodes = torch.arange(graph.number_of_nodes())
-    
-    sampler = dgl.dataloading.MultiLayerFullNeighborSampler([2])  # one layer at a time, taking all neighbors
-    dataloader = dgl.dataloading.NodeDataLoader(
-        graph, nodes, sampler,
-        batch_size=batch_size,
-        shuffle=False,
-        drop_last=False,
-        num_workers=0)
-    
-    with torch.no_grad():
-        for l, layer in enumerate(model.layers):
-            # Allocate a buffer of output representations for every node
-            # Note that the buffer is on CPU memory.
-            output_features = torch.zeros(graph.number_of_nodes(), model.n_hidden)
-
-            for input_nodes, output_nodes, bipartites in tqdm.tqdm(dataloader):
-                bipartite = bipartites[0].to(torch.device('cuda'))
-
-                x = input_features[input_nodes].cuda()
-
-                # the following code is identical to the loop body in model.forward()
-                x = layer(bipartite, x)
-                if l != model.n_layers - 1:
-                    x = F.relu(x)
-
-                output_features[output_nodes] = x.cpu()
-            input_features = output_features
-    return output_features
 
 def evaluate(emb, label, train_nids, valid_nids, test_nids):
     classifier = sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', verbose=1, max_iter=1000)
@@ -63,7 +29,7 @@ def evaluate(emb, label, train_nids, valid_nids, test_nids):
     test_acc = sklearn.metrics.accuracy_score(label[test_nids], test_pred)
     return valid_acc, test_acc
 
-def train(model,predictor,device,args,train_g,val_g):
+def train(model,predictor,device,args,train_g):
     best_accuracy = 0
     best_model_path = 'model.pt'
 
@@ -123,18 +89,15 @@ def train(model,predictor,device,args,train_g,val_g):
 
 if __name__ == "__main__":
     device = args.device
-
     # get data split
-    # TODO 所以就得到一个删去val和test边的adj_train，用这个adj_train构建一个graph对象(dgl.from_scipy)后将这个graph对象放入进行训练，val的时候就是将推测的值
-    #dataset = dgl.data.FB15k237Dataset()
     dataset = dgl.data.CoraGraphDataset()
     #graph = dataset.graph
     graph = dataset[0]
-    data_process(graph)
+    train_g,val_pos_nodepair,val_neg_nodepair,test_pos_nodepair,test_neg_nodepair = data_process(graph)
     model = SGD_MRVGAE(args.input_dim,args.n_hidden,args.input_dim,args.device,distype='Both',categorical_dim=args.categorical_dim).to(device) 
     predictor = ScorePredictor().to(device)
     opt = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()))
-    train(model,predictor,device,args,train_g,val_g)
+    train(model,predictor,device,args,train_g)
     print('--------end of scripts---------')
 
 
