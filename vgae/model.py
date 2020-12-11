@@ -55,7 +55,6 @@ class SGD_MRVGAE(nn.Module):
         ## encode
         h = self.enc_gcn[0](graph,x)
         h = self.enc_gcn[1](graph,h)
-        #TODO 采一个正样本图和一个负样本图来作计算
         pos_graph.ndata['h'] = h
         pos_graph.apply_edges(dgl.function.u_add_v('h', 'h', 'npair_emb')) 
         pos_npemb = pos_graph.edata['npair_emb']
@@ -111,7 +110,7 @@ class SGD_MRVGAE(nn.Module):
         negX = self.dec_mlpX(a)
         negX = self.relu(negX)
 
-        return None
+        return posA,posX,negA,negX
 
     def forward(self, blocks, x,pos_graph,neg_graph,temp):
         h = x

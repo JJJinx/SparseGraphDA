@@ -20,15 +20,6 @@ from processing import *
 from model import SGD_MRVGAE,ScorePredictor
 
 
-def evaluate(emb, label, train_nids, valid_nids, test_nids):
-    classifier = sklearn.linear_model.LogisticRegression(solver='lbfgs', multi_class='multinomial', verbose=1, max_iter=1000)
-    classifier.fit(emb[train_nids], label[train_nids])
-    valid_pred = classifier.predict(emb[valid_nids])
-    test_pred = classifier.predict(emb[test_nids])
-    valid_acc = sklearn.metrics.accuracy_score(label[valid_nids], valid_pred)
-    test_acc = sklearn.metrics.accuracy_score(label[test_nids], test_pred)
-    return valid_acc, test_acc
-
 def train(model,predictor,device,args,train_g):
     best_accuracy = 0
     best_model_path = 'model.pt'
@@ -78,14 +69,14 @@ def train(model,predictor,device,args,train_g):
                 
                 tq.set_postfix({'loss': '%.03f' % loss.item()}, refresh=False)
         
-        # TODO 后面考虑如何inference    
         model.eval()
-        emb = inference(model, val_g, node_features, args.batch_size)
-        valid_acc, test_acc = evaluate(emb.numpy(), node_labels.numpy())
-        print('Epoch {} Validation Accuracy {} Test Accuracy {}'.format(epoch, valid_acc, test_acc))
-        if best_accuracy < valid_acc:
-            best_accuracy = valid_acc
-            torch.save(model.state_dict(), best_model_path)
+        posA,posX,negA,negX = model.inference(train_g,val_pos_graph,val_neg_graph,node_features,temp=0.5)
+        #TODO 用VGAE的方式做检测
+        # valid_acc, test_acc = evaluate(emb.numpy(), node_labels.numpy())
+        # print('Epoch {} Validation Accuracy {} Test Accuracy {}'.format(epoch, valid_acc, test_acc))
+        # if best_accuracy < valid_acc:
+        #     best_accuracy = valid_acc
+        #     torch.save(model.state_dict(), best_model_path)
 
 if __name__ == "__main__":
     device = args.device
