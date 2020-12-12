@@ -41,8 +41,10 @@ class SGD_MRVGAE(nn.Module):
             self.vi_q          = nn.Linear(n_hidden[1],categorical_dim)
             ## decoder
             self.dec_mlp1 = nn.Linear(n_hidden[3],n_hidden[4]) 
-            self.dec_mlpA = nn.Linear(n_hidden[4],1)
             self.dec_mlpX = nn.Linear(n_hidden[4],out_feats)
+            ## edge classifier
+            self.cls_mlpA = nn.Linear(n_hidden[3],categorical_dim)#输出one-hot 编码
+            
     
     def inference(self,graph,pos_graph,neg_graph,x,temp):
         '''
@@ -94,21 +96,23 @@ class SGD_MRVGAE(nn.Module):
             negZ = negZ.view(-1,1,self.cat)  # [neg,1,cat_dim]
 
             negM = torch.matmul(negZ,negN).squeeze() #[neg,dn]  
-        # decode
+        # decode and classify
         ## for pos graph
-        a = self.dec_mlp1(posM)
-        a = self.relu(a)
-        posA = self.dec_mlpA(a)
-        posA = self.sigmoid(posA)
-        posX = self.dec_mlpX(a)
+        posX = self.dec_mlp1(posM)
         posX = self.relu(posX)
+        posX = self.dec_mlpX(posX)
+        posX = self.relu(posX)
+
+        posA = self.cls_mlpA(posM)
+        posA = nn.functional.softmax(posA,dim=-1)
         ## for neg graph
-        a = self.dec_mlp1(negM)
-        a = self.relu(a)
-        negA = self.dec_mlpA(a)
-        negA = self.sigmoid(negA)
-        negX = self.dec_mlpX(a)
+        negX = self.dec_mlp1(negM)
         negX = self.relu(negX)
+        negX = self.dec_mlpX(negX)
+        negX = self.relu(negX)
+
+        negA = self.cls_mlpA(negM)
+        negA = nn.functional.softmax(negA,dim=-1)
 
         return posA,posX,negA,negX
 
@@ -162,19 +166,21 @@ class SGD_MRVGAE(nn.Module):
             negM = torch.matmul(negZ,negN).squeeze() #[neg,dn]  
         # decode
         ## for pos graph
-        a = self.dec_mlp1(posM)
-        a = self.relu(a)
-        posA = self.dec_mlpA(a)
-        posA = self.sigmoid(posA)
-        posX = self.dec_mlpX(a)
+        posX = self.dec_mlp1(posM)
         posX = self.relu(posX)
+        posX = self.dec_mlpX(posX)
+        posX = self.relu(posX)
+
+        posA = self.cls_mlpA(posM)
+        posA = nn.functional.softmax(posA,dim=-1)
         ## for neg graph
-        a = self.dec_mlp1(negM)
-        a = self.relu(a)
-        negA = self.dec_mlpA(a)
-        negA = self.sigmoid(negA)
-        negX = self.dec_mlpX(a)
+        negX = self.dec_mlp1(negM)
         negX = self.relu(negX)
+        negX = self.dec_mlpX(negX)
+        negX = self.relu(negX)
+
+        negA = self.cls_mlpA(negM)
+        negA = nn.functional.softmax(negA,dim=-1)
 
         return [posA,negA,posX,negX,pos_mean,neg_mean,pos_logstd,neg_logstd,posq,negq]
         

@@ -218,10 +218,10 @@ def data_process(graph):
     val_neg_nodepair,test_neg_nodepair = neg_sampling(train_pos_nodepair,val_pos_nodepair,test_pos_nodepair,graph)
     ## 得到负样本对后为val和test都生成neg subgraph
     edges = torch.arange(graph.number_of_edges())
-    val_neg_graph = graph
+    val_neg_graph = graph.__copy__()
     val_neg_graph.remove_edges(edges)
     val_neg_graph = dgl.add_edges(val_neg_graph,val_neg_nodepair.T[0],val_neg_nodepair.T[1])
-    test_neg_graph = graph
+    test_neg_graph = graph.__copy__()
     test_neg_graph.remove_edges(edges)
     test_neg_graph = dgl.add_edges(test_neg_graph,test_neg_nodepair.T[0],test_neg_nodepair.T[1])
 
