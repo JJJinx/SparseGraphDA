@@ -30,12 +30,12 @@ def get_scores(posA, negA, pos_graph,neg_graph):
     def sigmoid(x):
         return 1 / (1 + np.exp(-x))
 
-    # Predict on test set of edges
     preds = posA.detach().numpy()
-    pos = np.ones_like(preds)
-
+    pos = np.zeros_like(preds,dtype=np.int16)
+    pos[:,1] = 1
     preds_neg = negA.detach().numpy()
-    neg = np.zeros_like(preds_neg)
+    neg = np.zeros_like(preds_neg,dtype=np.int16)
+    neg[:,0] = 1
 
     preds_all = np.vstack([preds,preds_neg])
     labels_all = np.vstack([pos,neg])
@@ -70,10 +70,10 @@ def train(model,predictor,device,args,train_g):
                 neg_graph = neg_graph.to(torch.device(device))
                 inputs = node_features[input_nodes].to(device)
                 [posA,negA,posX,negX,pos_mean,neg_mean,pos_logstd,neg_logstd,posq,negq] = model(bipartites, inputs,pos_graph,neg_graph,temp=0.5)
-                # TODO 进入解码器模型的是正负节点对的属性，所以输出的解码也是正负节点对，而不是节点特征，所以要重建也是重建节点对，且分类具体的节点对类别
-                label = torch.cat([torch.ones_like(posA), torch.zeros_like(negA)])
-                A = torch.cat([posA,negA])#TODO 现在的A是one hot的，需要改变一下 再进行计算loss
-                loss_A = F.binary_cross_entropy_with_logits(A, label)  
+                #one hot形式编码，无边为第0维，有边为第1维，设置标签，标签值为gt值
+                A = torch.cat([posA,negA])
+                label = torch.cat([torch.ones(posA.shape[0],dtype=torch.long),torch.zeros(negA.shape[0],dtype=torch.long)])
+                loss_A = F.cross_entropy(A, label)  
                 ## KL loss
                 mean = torch.cat([pos_mean,neg_mean])
                 logstd = torch.cat([pos_logstd,neg_logstd]) #将正负样本沿dim0拼接后取平均
@@ -93,7 +93,6 @@ def train(model,predictor,device,args,train_g):
                 recon = torch.cat([posX,negX])
                 recon_label = torch.cat([pos_graph.edata['np'],neg_graph.edata['np']])
                 loss_recon = F.mse_loss(recon,recon_label)
-
                 loss = loss_A+loss_VAE+loss_recon
                 opt.zero_grad()
                 loss.backward()
@@ -103,15 +102,15 @@ def train(model,predictor,device,args,train_g):
         
         model.eval()
         posA,posX,negA,negX = model.inference(train_g,val_pos_graph,val_neg_graph,node_features,temp=0.5)
-        #print(kl_gumbel,kl_norm)
+        print(loss_A,loss_VAE,loss_recon)
         val_roc, val_ap = get_scores(posA,negA,val_pos_graph,val_neg_graph)        
         print("Epoch:", '%04d' % (epoch + 1), "train_loss=", "{:.5f}".format(loss.item()), 
             "val_roc=", "{:.5f}".format(val_roc),"val_ap=", "{:.5f}".format(val_ap),
             "time=", "{:.5f}".format(time.time() - t))
 
-    test_roc, test_ap = get_scores(test_edges, test_edges_false, A_pred)
-    print("End of training!", "test_roc=", "{:.5f}".format(test_roc),
-        "test_ap=", "{:.5f}".format(test_ap))
+    #test_roc, test_ap = get_scores(test_edges, test_edges_false, A_pred)
+    #print("End of training!", "test_roc=", "{:.5f}".format(test_roc),
+    #    "test_ap=", "{:.5f}".format(test_ap))
 
 
 if __name__ == "__main__":
