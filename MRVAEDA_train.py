@@ -146,9 +146,6 @@ models = VGAE(in_dim,hidden_dim)
 optimizer = torch.optim.Adam(models.parameters(), lr=3e-3)
 ##  TODO  sheduler
 
-
-
-
 ## training
 def train():
     models.train()
@@ -181,7 +178,6 @@ def test():
 
 def predict():
     pass
-
 
 
 print('------------End of training----------')
