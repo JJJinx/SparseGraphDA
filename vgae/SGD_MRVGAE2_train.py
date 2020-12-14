@@ -68,23 +68,18 @@ def train(model,predictor,device,args,train_g):
                 pos_graph = pos_graph.to(torch.device(device))
                 neg_graph = neg_graph.to(torch.device(device))
                 inputs = node_features[input_nodes].to(device)
-                [posA,negA,posX,negX,pos_mean,neg_mean,pos_logstd,neg_logstd,posq,negq] = model(bipartites, inputs,pos_graph,neg_graph,temp=0.5)
+                #[posA,negA,posX,negX,pos_mean,neg_mean,pos_logstd,neg_logstd,posq,negq] = model(bipartites, inputs,pos_graph,neg_graph,temp=0.5)
+                [posA,negA,posX,negX,pos_mean,neg_mean,pos_logstd,neg_logstd] = model(bipartites, inputs,pos_graph,neg_graph,temp=0.5)
                 #one hot形式编码，无边为第0维，有边为第1维，设置标签，标签值为gt值
                 A = torch.cat([posA,negA])
                 label = torch.cat([torch.ones(posA.shape[0],dtype=torch.long),torch.zeros(negA.shape[0],dtype=torch.long)]).to(device)
                 loss_A = F.cross_entropy(A, label)  
+                
                 ## KL loss
                 mean = torch.cat([pos_mean,neg_mean])
                 logstd = torch.cat([pos_logstd,neg_logstd]) #将正负样本沿dim0拼接后取平均
                 kl_norm= torch.mean(-0.5*torch.sum(1+2*logstd-mean**2-logstd.exp()**2,dim=1),dim=0) 
-
-                q = torch.cat([posq,negq])
-                q_for_kl = F.softmax(q,dim=1)
-                eps = 1e-20
-                h1 = -q_for_kl*torch.log(q_for_kl + eps)#h(p)
-                h2 = -q_for_kl*np.log(1./args.categorical_dim) #h(pq)
-                kl_gumbel = torch.mean(torch.sum(h2-h1,dim=1),dim=0)
-                loss_VAE = kl_gumbel+kl_norm
+                loss_VAE = kl_norm
 
                 neg_graph.ndata['feat'] = pos_graph.ndata['feat'] #仅有pos graph有特征
                 pos_graph.apply_edges(dgl.function.u_add_v('feat', 'feat', 'np')) 
@@ -119,7 +114,7 @@ if __name__ == "__main__":
     #graph = dataset.graph
     graph = dataset[0]
     train_g,val_pos_graph,val_neg_graph,test_pos_graph,test_neg_graph = data_process(graph)
-    model = SGD_MRVGAE(args.input_dim,args.n_hidden,args.input_dim,args.device,distype='Both',categorical_dim=args.categorical_dim).to(device) 
+    model = SGD_MRVGAE2(args.input_dim,args.n_hidden,args.input_dim,args.device,distype='Both',categorical_dim=args.categorical_dim).to(device) 
     predictor = ScorePredictor().to(device)
     opt = torch.optim.Adam(list(model.parameters()) + list(predictor.parameters()))
     train(model,predictor,device,args,train_g)
