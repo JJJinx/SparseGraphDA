@@ -14,6 +14,12 @@ def Is_self_loop_exist(edge_index,node_num):
     return symble
 
 def generate_all_node_pair(node_num,edge_index,node_label,ntype_etype_mapping):
+    '''
+    return
+        all_node_pair :: shape [N ,2]
+        all_node_pair_label :: shape [N]
+    '''
+    #
     edge_index = edge_index.T
     row = torch.arange(node_num)
     col = torch.arange(node_num)
@@ -28,9 +34,10 @@ def generate_all_node_pair(node_num,edge_index,node_label,ntype_etype_mapping):
         ntype_pair = [node_label[src],node_label[dst]] # [souce node type,destination node type]
         node_pair_label = ntype_etype_mapping[ntype_pair] # this node pair's label, looking up from the dict
         # return the corresponding index of this node pair in all_node_pair
-        #print(torch.nonzero(torch.all(torch.eq(all_node_pair,node_pair),dim=-1)))
         i = torch.nonzero(torch.all(torch.eq(all_node_pair,node_pair),dim=-1))
         all_node_pair_label[i] = node_pair_label # value this node_pair's type
+    # TODO 利用6进制来使用矩阵运算快速得出all_node_pair_labels
+    
     # for i in range(all_node_pair.shape[0]):
     #     node_pair = all_node_pair[i]
     #     src = node_pair[0]  #source node index
@@ -42,6 +49,7 @@ def generate_all_node_pair(node_num,edge_index,node_label,ntype_etype_mapping):
     #         all_node_pair_label[i] = node_pair_label # value this node_pair's type
     #     else:
     #         all_node_pair_label[i] = 0
+
     return all_node_pair,all_node_pair_label
 
 if __name__ == "__main__":
@@ -55,6 +63,7 @@ if __name__ == "__main__":
             ntype_etype_mapping[tgt_node_type,src_node_type] = i
             i+=1
     node_pair,node_pair_label = generate_all_node_pair(5,edge_index,node_label,ntype_etype_mapping)
+    print(node_pair)
     print(node_pair_label.view(5,5))
     ##检查一对元素是否在edge index中
     # check = torch.tensor([5,3])

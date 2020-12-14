@@ -8,6 +8,7 @@ os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import random
 import numpy as np
 from torch import nn
+from torch.utils.data import Dataset, DataLoader
 import torch.nn.functional as F
 import itertools
 from argparse import ArgumentParser
@@ -85,7 +86,6 @@ require
 '''
 source_node_num = source_data.x.shape[0]
 target_node_num = target_data.x.shape[0]
-input_dim = source_data.x.shape[1]
 print(source_data.edge_index.shape)
 print(target_data.edge_index.shape)
 t = time.time()
@@ -101,9 +101,28 @@ source_graph = dgl.graph(src_edge_index_sl[0],src_edge_index_sl[1])
 target_graph = dgl.graph(tgt_edge_index_sl[0],tgt_edge_index_sl[1])
 source_graph.ndata['feats'] = source_data.x
 target_graph.ndata['feats'] = target_data.x
+## TODO dataloader
+class Node_Pair_Dataset(Dataset):
+    def __init__(self,node_pairs,node_pair_labels):
+        super(Node_Pair_Dataset, self).__init__()
+        self.x = node_pairs  # shape [N,2]
+        self.y = node_pair_labels # shape [N]
+    def __getitem__(self,index):
+        return self.x[index],self.y[index]
+    def __len__(self):
+        return self.x.shape[0]
+source_np_dataset = Node_Pair_Dataset(src_all_node_pair,src_all_node_pair_label)
+target_np_dataset = Node_Pair_Dataset(tgt_all_node_pair,tgt_all_node_pair_label)
+src_dataloader = DataLoader(source_np_dataset, batch_size=2048,
+                        shuffle=True, num_workers=4)
+tgt_dataloader = DataLoader(target_np_dataset, batch_size=2048,
+                        shuffle=True, num_workers=4)
 ## model
+# TODO assert this two items are the same
+input_dim = source_data.x.shape[1]
 in_dim = dataset.num_features
 hidden_dim = [] #TODO
+# THE model TODO
 class VGAE(torch.nn.Module):
     def __init__(self, in_dim,hidden_dim, **kwargs):
         super(VGAE, self).__init__()
@@ -122,11 +141,12 @@ class VGAE(torch.nn.Module):
         A = self.private_decoder(h)
         return A
 
-
-loss_func = nn.CrossEntropyLoss().to(device)
-
 models = VGAE(in_dim,hidden_dim)
 optimizer = torch.optim.Adam(models.parameters(), lr=3e-3)
+##  TODO  sheduler
+
+
+
 
 ## training
 def train():
