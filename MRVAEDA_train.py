@@ -41,10 +41,6 @@ rate = 0.0
 # np.random.seed(seed)
 # torch.manual_seed(seed)
 ## input data
-dataset = DomainData("data/{}".format(args.source), name=args.source)
-source_data = dataset[0]
-dataset = DomainData("data/{}".format(args.target), name=args.target)
-target_data = dataset[0]
 '''
 dataset 
     :: x node feature
@@ -53,6 +49,11 @@ dataset
     :: train_mask mask for nodes
     :: test_mask mask for nodes
 '''
+dataset = DomainData("data/{}".format(args.source), name=args.source)
+source_data = dataset[0]
+dataset = DomainData("data/{}".format(args.target), name=args.target)
+target_data = dataset[0]
+
 label_min_index = source_data.y.min()
 label_max_index = source_data.y.max()
 # mapping from node type to node pair type
@@ -64,16 +65,6 @@ for src_node_type in range(label_min_index,label_max_index+1):
         ntype_etype_mapping[tgt_node_type,src_node_type] = i
         i+=1
 ## data processing
-# to avoid missing nodes, we should add all the self loop in the edge index and then build up the graph
-self_loop = torch.arange(source_data.x.shape[0])
-self_loop = self_loop.unsqueeze(1).repeat(1,2)
-edge_index = source_data.edge_index
-src_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
-
-self_loop = torch.arange(target_data.x.shape[0])
-self_loop = self_loop.unsqueeze(1).repeat(1,2)
-edge_index = target_data.edge_index
-tgt_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
 '''
 require
     source graph
@@ -84,6 +75,17 @@ require
     mini_batch
         batch node pair :: [src_node_idx,dst_node_idx]
 '''
+# to avoid missing nodes, we should add all the self loop in the edge index and then build up the graph
+self_loop = torch.arange(source_data.x.shape[0])
+self_loop = self_loop.unsqueeze(1).repeat(1,2)
+edge_index = source_data.edge_index
+src_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
+
+self_loop = torch.arange(target_data.x.shape[0])
+self_loop = self_loop.unsqueeze(1).repeat(1,2)
+edge_index = target_data.edge_index
+tgt_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
+
 source_node_num = source_data.x.shape[0]
 target_node_num = target_data.x.shape[0]
 print(source_data.edge_index.shape)
@@ -95,13 +97,12 @@ print(src_all_node_pair_label)
 print(time.time()-t)
 np.savetxt('acm_all_node_pair_label.csv',src_all_node_pair_label.numpy(),delimiter=',')
 np.savetxt('dblp_all_node_pair_label.csv',tgt_all_node_pair_label.numpy(),delimiter=',')
-raise RuntimeError
 ## generate train graph
 source_graph = dgl.graph(src_edge_index_sl[0],src_edge_index_sl[1])
 target_graph = dgl.graph(tgt_edge_index_sl[0],tgt_edge_index_sl[1])
 source_graph.ndata['feats'] = source_data.x
 target_graph.ndata['feats'] = target_data.x
-## TODO dataloader
+## dataloader
 class Node_Pair_Dataset(Dataset):
     def __init__(self,node_pairs,node_pair_labels):
         super(Node_Pair_Dataset, self).__init__()
