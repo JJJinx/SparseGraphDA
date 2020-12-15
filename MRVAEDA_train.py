@@ -92,6 +92,8 @@ print(source_data.edge_index.shape)
 print(target_data.edge_index.shape)
 t = time.time()
 src_all_node_pair,src_all_node_pair_label = generate_all_node_pair(source_node_num,src_edge_index_sl,source_data.y,ntype_etype_mapping)
+
+raise RuntimeError
 tgt_all_node_pair,tgt_all_node_pair_label = generate_all_node_pair(target_node_num,tgt_edge_index_sl,target_data.y,ntype_etype_mapping)
 print(src_all_node_pair_label)
 print(time.time()-t)
