@@ -60,6 +60,11 @@ def generate_all_node_pair(node_num,edge_index,node_label,node_label_num,adj):
     '''
     return all_node_pair,all_node_pair_label,max_np_label
 
+def generate_mapping_M(node_type_num,np_type_num):
+    mapping_M = torch.zeros((np_type_num,node_type_num),dtype=torch.long)
+    
+    return mapping_M
+
 if __name__ == "__main__":
     node_label = torch.tensor([0,1,2,0,2])
     edge_index = torch.tensor([[0,0,0,1,1,2,2,3,4],[0,2,4,1,4,2,3,3,4]])

@@ -26,7 +26,7 @@ class Node_Pair_Dataset(Dataset):
     def __len__(self):
         return self.x.shape[0]
 
-## the da is discriminate the hidden embedding instead of the reconstruction result
+## TODO the da is discriminate the hidden embedding instead of the reconstruction result
 class MRVAEDA(torch.nn.Module):
     def __init__(self, in_dim,hidden_dim,categorical_dim,device, **kwargs):
         super(MRVAEDA, self).__init__()
@@ -66,9 +66,6 @@ class MRVAEDA(torch.nn.Module):
         domain_pred = self.discriminator(M,rate)
 
         return x_recon,A_pred,domain_pred,mean,logstd,q
-    # def inference(self,x,edge_index,domain):
-    #     if domain == 'source'
-    #     x = self.private_encoder_source(x,edge_index,domain) 
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
@@ -101,25 +98,30 @@ class FocalLoss(nn.Module):
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
-def evaluate(np_pred,np_label,node_num,node_label,min_node_label,max_node_label): # TODO
+def evaluate(np_pred,np_label,mapping_matrix,node_label): 
     '''
     require
-        
         np_pred :: prediction for node pair  [NP,cat]
         np_label :: ground truth for node pair [NP,1]
+        mapping_matrix :: mapping from np type to node type vote, [cat,node_label_num],
+                            example: node label num=2 cat = 4
+                            nlabel    0,1         
+                            cat = 0 [[0,0],
+                            cat = 1  [1,0],
+                            cat = 2  [1,1],
+                            cat = 3  [0,1]]
         np_vote_node_label :: each node pair vote for the src node's type according to the np type [NP,node_label_num]
-        node_pred :: reshape the np_vote_node_label to [N,N,node_label_num] and sum by the dim=2 then apply argmax get [N,1] node label pred
     '''
     # calculate the node pair accuracy
-
-    # get the node prediction from node pair prediction
-    
-    node_vote_list = torch.zeros([node_num,max_node_label-min_node_label+1],dtype=torch.int32)
-    ## vote for the node class pred
-
+    node_pair_acc = np_pred.argmax(dim=1).eq(np_label).float().mean()
     # calculate the node accuracy
-
-    return None
+    np_pred = np_pred.argmax(dim=1) # [NP,]
+    np_vote_node_label = mapping_matrix[np_pred].view(node_num,node_num,-1)
+    node_pred = np_vote_node_label.sum(dim=1).argmax(dim=1) # node_pred :: reshape the np_vote_node_label to [N,N,node_label_num] 
+                                                            # and sum by the dim=1 and get a tensor of [N, nodel_label_num] 
+                                                            # then apply argmax get [N,] node label pred
+    node_acc = node_pred.eq(node_label).float().mean()
+    return node_pair_acc,node_acc
 
 
 def train(epochs,src_dataloader,tgt_dataloader,source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
@@ -188,11 +190,15 @@ def train(epochs,src_dataloader,tgt_dataloader,source_node_feat,source_edge_inde
             optimizer.step()
 
         models.eval()
-        ## for src only test node pairs are used; for tgt the whole graph is used TODO check whether is correct
+        ## for src only test node pairs are used; for tgt the whole graph is used 
+        # TODO check whether is correct
+        # TODO generate the src_test_np and mapping matrix in the dataprocessing
         _,src_A_pred,_,_,_,_ = models(source_node_feat, source_edge_index,src_test_np,'source',rate)
         _,tgt_A_pred,_,_,_,_ = models(target_node_feat, target_edge_index,tgt_all_node_pair,'target',rate)
-        src_acc = evaluate(src_A_pred,src_test_np_label)
-        tgt_acc = evaluate(tgt_A_pred,tgt_all_node_pair_label)
+        src_np_acc,src_node_acc = evaluate(src_A_pred,src_test_np_label,mapping_matrix,source_node_label)
+        tgt_np_acc,tgt_node_acc = evaluate(tgt_A_pred,tgt_all_node_pair_label,mapping_matrix,target_node_label)
+        print(src_np_acc,src_node_acc)
+        print(tgt_np_acc,tgt_node_acc)
 
 if __name__ == "__main__":
     # #print all value
