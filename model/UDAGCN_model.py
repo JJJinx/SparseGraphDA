@@ -1,7 +1,7 @@
 # coding=utf-8
 import torch
-from dual_gnn.cached_gcn_conv import CachedGCNConv
-from dual_gnn.ppmi_conv import PPMIConv
+from model.dual_gnn_layer.cached_gcn_conv import CachedGCNConv
+from model.dual_gnn_layer.ppmi_conv import PPMIConv
 from torch import nn
 import torch.nn.functional as F
 

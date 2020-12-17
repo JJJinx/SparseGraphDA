@@ -4,8 +4,7 @@ from torch_scatter import scatter_add
 from torch_geometric.utils import add_remaining_self_loops
 import numpy as np
 from tqdm import tqdm
-from dual_gnn.cached_gcn_conv import CachedGCNConv
-
+from cached_gcn_conv import CachedGCNConv
 
 class PPMIConv(CachedGCNConv):
 
@@ -112,5 +111,6 @@ class PPMIConv(CachedGCNConv):
 
 
 
-
-
+if __name__ == "__main__":
+    ppmi= PPMIConv(1,2)
+    print(ppmi)

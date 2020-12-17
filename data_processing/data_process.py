@@ -60,15 +60,24 @@ def generate_all_node_pair(node_num,edge_index,node_label,node_label_num,adj):
     '''
     return all_node_pair,all_node_pair_label,max_np_label
 
-def generate_mapping_M(node_type_num,np_type_num):
-    mapping_M = torch.zeros((np_type_num,node_type_num),dtype=torch.long)
-    
+def generate_mapping_M(node_label_num,np_type_num):
+    mapping_M = torch.zeros((np_type_num,node_label_num),dtype=torch.long)
+    for src in range(node_label_num):
+        for dst in range(node_label_num):
+            if src > dst:
+                new_src = dst
+                new_dst = src
+            else:
+                new_src = src
+                new_dst = dst
+            np_type = int((node_label_num+node_label_num-(new_src-1))*((new_src-1)+1)/2+(new_dst-new_src)+1)
+            mapping_M[np_type,src] =1 
     return mapping_M
 
 if __name__ == "__main__":
-    node_label = torch.tensor([0,1,2,0,2])
-    edge_index = torch.tensor([[0,0,0,1,1,2,2,3,4],[0,2,4,1,4,2,3,3,4]])
-    g = dgl.graph((edge_index[0],edge_index[1]))
+    # node_label = torch.tensor([0,1,2,0,2])
+    # edge_index = torch.tensor([[0,0,0,1,1,2,2,3,4],[0,2,4,1,4,2,3,3,4]])
+    # g = dgl.graph((edge_index[0],edge_index[1]))
     # ntype_etype_mapping = torch.zeros([3,3],dtype=torch.long)
     # i = 1
     # for src_node_type in range(0,3):
@@ -76,9 +85,6 @@ if __name__ == "__main__":
     #         ntype_etype_mapping[src_node_type,tgt_node_type] = i
     #         ntype_etype_mapping[tgt_node_type,src_node_type] = i
     #         i+=1
-    node_pair,node_pair_label,max_np_label = generate_all_node_pair(5,edge_index,node_label,3,g.adjacency_matrix())
-    print(node_pair)
-    print(node_pair_label)
-    print(node_pair.view(-1,2))
-    print(node_pair_label.view(-1))
-    
+    #node_pair,node_pair_label,max_np_label = generate_all_node_pair(5,edge_index,node_label,3,g.adjacency_matrix())
+    M = generate_mapping_M(4,10+1)
+    print(M)

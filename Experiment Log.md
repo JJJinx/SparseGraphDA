@@ -157,14 +157,6 @@ VGAE中使用CE损失来为每个节点对之间边的存在性进行判定
 
 * 为什么会DA效果下降，从acm2dblp和acm2del_dblp0.2_1的degree_related_acc的图片来看，主要原因是1.度为0的节点大大增加2.度为1的节点准确率大大下降（0.6->0.4）
 
-  <img src="images/image-20201209182658263.png" alt="image-20201209182658263"  />
-
-  del_dblp
-
-  ![image-20201209182741851](images/image-20201209182741851.png)
-
-  dblp
-
   
 
 ## TODO
