@@ -39,12 +39,16 @@ class MRVAEDA(torch.nn.Module):
         self.private_decoder_target = private_decoder(hidden_dim[4],hidden_dim[5],in_dim) # 2layers
         self.A_classifier = relation_classifier(hidden_dim[3],hidden_dim[3]//2,categorical_dim) #classify the node pair's class
         self.discriminator = discriminator(hidden_dim[3],hidden_dim[3]//2)
-    def forward(self, x, edge_index,node_pair,domain):
+    def forward(self, x, edge_index,node_pair,domain,rate):
         '''
             x :: shape [node_num,feat_dim]
             node_pair :: shape [batch_size,2]
         '''
-        x = self.private_encoder_source(x,edge_index,domain) 
+        if domain =='source':
+            x = self.private_encoder_source(x,edge_index,domain) 
+        if domain =='target':
+            x = self.private_encoder_target(x,edge_index,domain) 
+
         h = self.shared_encoder(x,edge_index,domain) # [node_num,hidden_dim[1]]
         # h_src = h[node_pair[:,0]]  # [batch_size,dh] 
         # h_dst = h[node_pair[:,1]]  # [batch_size,dh]
@@ -53,24 +57,18 @@ class MRVAEDA(torch.nn.Module):
         hadd = h[node_pair[:,0]]+h[node_pair[:,1]]
         M,mean,logstd,q = self.VI(hadd,temp = 0.5)
         x_recon = self.shared_decoder(M)
-        x_recon = self.private_decoder_source(x_recon)
-        A_pred = self.A_classifier(M)
-        domain_pred = self.discriminator(M)
-        return x_recon,A_pred,domain_pred,mean,logstd,q
-    def inference(self): # TODO
-        pass
+        if domain == 'source':
+            x_recon = self.private_decoder_source(x_recon)
+        if domain == 'target':
+            x_recon = self.private_decoder_target(x_recon)
 
-# def focal_loss(input,targets,device,alpha=.25,gamma=2):
-#     BCE_loss = F.binary_cross_entropy_with_logits(input,targets)
-#     targets = targets.type(torch.long)
-#     # alpha is the weight for different class
-#     alpha = torch.tensor([alpha,1-alpha]).to(device)
-#     print(alpha)
-#     at = alpha.gather(0,target.data.view(-1))
-#     print(at)
-#     pt = torch.exp(-BCE_loss)
-#     F_loss = at*(1-pt)**gamma * BCE_loss
-#     return F_loss.mean()
+        A_pred = self.A_classifier(M)
+        domain_pred = self.discriminator(M,rate)
+
+        return x_recon,A_pred,domain_pred,mean,logstd,q
+    # def inference(self,x,edge_index,domain):
+    #     if domain == 'source'
+    #     x = self.private_encoder_source(x,edge_index,domain) 
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
@@ -88,6 +86,7 @@ class FocalLoss(nn.Module):
             input = input.contiguous().view(-1,input.size(2))   # N,H*W,C => N*H*W,C
         target = target.view(-1,1).long()
         logpt = F.log_softmax(input)
+        #print('target_max',target.max())
         logpt = logpt.gather(1,target) # torch.gather(logpt,dim=1,index=target)
         logpt = logpt.view(-1)
         pt = torch.exp(logpt)
@@ -102,10 +101,31 @@ class FocalLoss(nn.Module):
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
+def evaluate(np_pred,np_label,node_num,node_label,min_node_label,max_node_label): # TODO
+    '''
+    require
+        
+        np_pred :: prediction for node pair  [NP,cat]
+        np_label :: ground truth for node pair [NP,1]
+        np_vote_node_label :: each node pair vote for the src node's type according to the np type [NP,node_label_num]
+        node_pred :: reshape the np_vote_node_label to [N,N,node_label_num] and sum by the dim=2 then apply argmax get [N,1] node label pred
+    '''
+    # calculate the node pair accuracy
 
-def train(epochs,src_dataloader,tgt_dataloader,source_data,target_data,device):
-    models.train()
+    # get the node prediction from node pair prediction
+    
+    node_vote_list = torch.zeros([node_num,max_node_label-min_node_label+1],dtype=torch.int32)
+    ## vote for the node class pred
+
+    # calculate the node accuracy
+
+    return None
+
+
+def train(epochs,src_dataloader,tgt_dataloader,source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
     for epoch in range(epochs): # start from 0
+        models.train()
+        rate = min((epoch + 1) / epochs, 0.05)
         for batch_idx,data in enumerate(zip(src_dataloader,tgt_dataloader)):
             # TODO 在data process中将正负样本分开来，或者得到正负样本分别的index list
             # 每个批次有大量的负样本，也就是没有边的样本 1024中仅有30个左右正样本
@@ -120,14 +140,14 @@ def train(epochs,src_dataloader,tgt_dataloader,source_data,target_data,device):
             src_batch_np_label = src_batch_np_label.to(device)
             tgt_batch_np_label = tgt_batch_np_label.to(device)
             ## build the reconstruction target
-            src_recon_label = source_data.x[src_batch_np[:,0]]+ source_data.x[src_batch_np[:,1]]
-            tgt_recon_label = target_data.x[tgt_batch_np[:,0]]+ target_data.x[tgt_batch_np[:,1]]
+            src_recon_label = source_node_feat[src_batch_np[:,0]]+ source_node_feat[src_batch_np[:,1]]
+            tgt_recon_label = target_node_feat[tgt_batch_np[:,0]]+ target_node_feat[tgt_batch_np[:,1]]
             ## put into the model
             src_batch_np = src_batch_np.to(device)
             tgt_batch_np = tgt_batch_np.to(device)
             # TODO  加入随epoch自适应的temp参数
-            src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_data.x, source_data.edge_index,src_batch_np,domain='source')
-            tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_data.x, target_data.edge_index,tgt_batch_np,domain='target')
+            src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_batch_np,'source',rate)
+            tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_batch_np,'target',rate)
             ## source domain cls focal loss
             focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
             loss_cls = focal_loss(src_A_pred,src_batch_np_label)
@@ -159,19 +179,26 @@ def train(epochs,src_dataloader,tgt_dataloader,source_data,target_data,device):
             loss_kl = kl_gumbel+kl_norm
             # backward
             loss = loss_cls+loss_recon+loss_da+loss_kl
-            print(loss_cls.item,loss_recon.item,loss_da.item,loss_kl.item)
+            # print('loss_cls:',loss_cls.item(),
+            #         'loss_recon:',loss_recon.item(),
+            #         'loss_da:',loss_da.item(),
+            #         'loss_kl:',loss_kl.item())
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-# TODO
-def test():
-    pass
+
+        models.eval()
+        ## for src only test node pairs are used; for tgt the whole graph is used TODO check whether is correct
+        _,src_A_pred,_,_,_,_ = models(source_node_feat, source_edge_index,src_test_np,'source',rate)
+        _,tgt_A_pred,_,_,_,_ = models(target_node_feat, target_edge_index,tgt_all_node_pair,'target',rate)
+        src_acc = evaluate(src_A_pred,src_test_np_label)
+        tgt_acc = evaluate(tgt_A_pred,tgt_all_node_pair_label)
 
 if __name__ == "__main__":
     # #print all value
     # torch.set_printoptions(profile="full")
 
-    device = 'cpu'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = 'cuda'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     parser = ArgumentParser()
     parser.add_argument("--source", type=str, default='acm')
     parser.add_argument("--target", type=str, default='dblp')
@@ -193,7 +220,7 @@ if __name__ == "__main__":
     dataset 
         :: x node feature
         :: y node label min=0 max=5
-        :: edge_index node pair for existing edge, start from 0  TODO edge_index中现在只有单向边，应当使其成为双向的边
+        :: edge_index node pair for existing edge, start from 0
         :: train_mask mask for nodes
         :: test_mask mask for nodes
     '''
@@ -205,14 +232,6 @@ if __name__ == "__main__":
     label_min_index = source_data.y.min()
     label_max_index = source_data.y.max()
     node_label_num = label_max_index-label_min_index+1
-    # mapping from node type to node pair type
-    # ntype_etype_mapping = torch.zeros([label_max_index-label_min_index+1,label_max_index-label_min_index+1],dtype=torch.long)
-    # i = 0
-    # for src_node_type in range(label_min_index,label_max_index+1):
-    #     for tgt_node_type in range(src_node_type,label_max_index+1):
-    #         ntype_etype_mapping[src_node_type,tgt_node_type] = i
-    #         ntype_etype_mapping[tgt_node_type,src_node_type] = i
-    #         i+=1
     ## data processing
     '''
     require
@@ -227,29 +246,34 @@ if __name__ == "__main__":
     # to avoid missing nodes, we should add all the self loop in the edge index and then build up the graph
     self_loop = torch.arange(source_data.x.shape[0])
     self_loop = self_loop.unsqueeze(1).repeat(1,2)
-    edge_index = source_data.edge_index
-    src_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
+    src_edge_index_sl = torch.cat([source_data.edge_index.T,self_loop]).T #[2,N]
 
     self_loop = torch.arange(target_data.x.shape[0])
     self_loop = self_loop.unsqueeze(1).repeat(1,2)
-    edge_index = target_data.edge_index
-    tgt_edge_index_sl = torch.cat([edge_index.T,self_loop]).T #[2,N]
+    tgt_edge_index_sl = torch.cat([target_data.edge_index.T,self_loop]).T #[2,N]
+    del self_loop
     ## generate train graph
     # TODO 需要将之前的数据形式改为graph的形式，不然模型的gcn没法处理
-    source_graph = dgl.graph((src_edge_index_sl[0],src_edge_index_sl[1]))
-    target_graph = dgl.graph((tgt_edge_index_sl[0],tgt_edge_index_sl[1]))
-    # source_graph.ndata['feats'] = source_data.x
-    # target_graph.ndata['feats'] = target_data.x
-    # source_graph.ndata['nlabel'] = source_data.y
-    # target_graph.ndata['nlabel'] = target_data.y
+    source_graph = dgl.to_simple(dgl.graph((src_edge_index_sl[0],src_edge_index_sl[1])))
+    target_graph = dgl.to_simple(dgl.graph((tgt_edge_index_sl[0],tgt_edge_index_sl[1])))
+    ## make edge index to be bidirected
+    source_graph = dgl.to_bidirected(source_graph)
+    target_graph = dgl.to_bidirected(target_graph)
+    src_edge_index_sl = torch.vstack([source_graph.edges()[0],source_graph.edges()[1]])
+    tgt_edge_index_sl = torch.vstack([target_graph.edges()[0],target_graph.edges()[1]])
     ##generate all node pair label
     source_node_num = source_data.x.shape[0]
     target_node_num = target_data.x.shape[0]
-    src_all_node_pair,src_all_node_pair_label,max_np_label =generate_all_node_pair(source_node_num,src_edge_index_sl,source_data.y,
+    source_node_feat = source_data.x
+    target_node_feat = target_data.x
+    source_node_label = source_data.y
+    target_node_label = target_data.y
+    del source_data,target_data
+    src_all_node_pair,src_all_node_pair_label,max_np_label =generate_all_node_pair(source_node_num,src_edge_index_sl,source_node_label,
                                                                                     node_label_num,source_graph.adjacency_matrix()) # tensor,tensor
     src_all_node_pair = src_all_node_pair.view(-1,2)
     src_all_node_pair_label = src_all_node_pair_label.view(-1)
-    tgt_all_node_pair,tgt_all_node_pair_label,max_np_label = generate_all_node_pair(target_node_num,tgt_edge_index_sl,target_data.y,
+    tgt_all_node_pair,tgt_all_node_pair_label,max_np_label = generate_all_node_pair(target_node_num,tgt_edge_index_sl,target_node_label,
                                                                                     node_label_num,target_graph.adjacency_matrix())
     tgt_all_node_pair = tgt_all_node_pair.view(-1,2)
     tgt_all_node_pair_label = tgt_all_node_pair_label.view(-1)
@@ -261,9 +285,9 @@ if __name__ == "__main__":
     ## dataloader
     source_np_dataset = Node_Pair_Dataset(src_all_node_pair,src_all_node_pair_label)
     target_np_dataset = Node_Pair_Dataset(tgt_all_node_pair,tgt_all_node_pair_label)
-    src_dataloader = DataLoader(source_np_dataset, batch_size=512,
+    src_dataloader = DataLoader(source_np_dataset, batch_size=8192,
                             shuffle=True, num_workers=4)
-    tgt_dataloader = DataLoader(target_np_dataset, batch_size=512,
+    tgt_dataloader = DataLoader(target_np_dataset, batch_size=8192,
                             shuffle=True, num_workers=4) 
     ## model
     categorical_dim = max_np_label-min_np_label+1
@@ -276,9 +300,9 @@ if __name__ == "__main__":
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,np.arange(1,200,50), gamma=0.1, last_epoch=-1)
 
     ## training
-    source_data = source_data.to(device)
-    target_data = target_data.to(device)
-    train(1,src_dataloader,tgt_dataloader,source_data,target_data,device)
-
-
+    t = time.time()
+    train(1,src_dataloader,tgt_dataloader,
+            source_node_feat.to(device),src_edge_index_sl.to(device),
+            target_node_feat.to(device),tgt_edge_index_sl.to(device),device)
+    print('time used:',time.time()-t)
     print('------------End of training----------')

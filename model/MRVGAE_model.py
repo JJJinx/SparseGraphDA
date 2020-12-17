@@ -128,12 +128,29 @@ class relation_classifier(nn.Module):
 class discriminator(nn.Module):
     def __init__(self,in_feats,hidden_dim,**kwargs):
         super(discriminator,self).__init__()
+        self.grl = GRL()
         self.mlp1 = nn.Linear(in_feats,hidden_dim) 
         self.mlp2 = nn.Linear(hidden_dim,2)
         self.relu = nn.ReLU()
-    def forward(self,x):
+    def forward(self,x,rate):
+        x = self.grl(x,rate)
         x = self.mlp1(x)
         x = self.relu(x)
         x = self.mlp2(x)
         #x = torch.softmax(x) the softmax is implemented in the crossentropy loss function
         return x
+
+class GradReverse(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, x,rate):
+        ctx.rate = rate
+        return x.view_as(x)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        grad_output = grad_output.neg() * ctx.rate
+        return grad_output, None
+
+class GRL(nn.Module):
+    def forward(self, input,rate):
+        return GradReverse.apply(input,rate)
