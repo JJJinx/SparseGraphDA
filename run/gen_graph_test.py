@@ -2,7 +2,7 @@ import dgl
 import torch
 import torch.nn as nn
 import os
-from dataset.DomainData import DomainData
+from DomainData import DomainData
 from data_process import *
 
 

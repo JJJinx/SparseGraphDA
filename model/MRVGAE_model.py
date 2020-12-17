@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import dgl
 import dgl.nn.pytorch as dglnn
-from gnn_layer.cached_gcn_conv import CachedGCNConv
+from cached_gcn_conv import CachedGCNConv
 
 '''
 DGL GCN ENCODER

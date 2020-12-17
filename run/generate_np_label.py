@@ -7,7 +7,7 @@ import psutil
 import numpy as np
 from torch import nn
 from argparse import ArgumentParser
-from dataset.DomainData import DomainData
+from data_processing.DomainData import DomainData
 from data_process import *
 
 # TODO 查看是否每次生成的数据集是否会改变NP标签的顺序之类的

@@ -10,9 +10,9 @@ from torch import nn
 import torch.nn.functional as F
 import itertools
 from argparse import ArgumentParser
-from dual_gnn.cached_gcn_conv import CachedGCNConv
-from dataset.DomainData import DomainData
-from dual_gnn.ppmi_conv import PPMIConv
+from cached_gcn_conv import CachedGCNConv
+from DomainData import DomainData
+from ppmi_conv import PPMIConv
 from data_vis import degree_level_acc
 
 # from torch.utils.tensorboard import SummaryWriter

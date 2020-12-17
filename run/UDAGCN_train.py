@@ -5,7 +5,7 @@ print(torch.cuda.is_available())
 import os
 os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 from argparse import ArgumentParser
-from dual_gnn.dataset.DomainData import DomainData
+from DomainData import DomainData
 from model.UDAGCN_model import *
 from torch import nn
 from torch import nn.functional as F
