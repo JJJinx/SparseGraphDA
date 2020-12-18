@@ -97,31 +97,6 @@ class FocalLoss(nn.Module):
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
-def evaluate(np_pred,np_label,mapping_matrix,node_label): 
-    '''
-    require
-        np_pred :: prediction for node pair  [NP,cat]
-        np_label :: ground truth for node pair [NP,1]
-        mapping_matrix :: mapping from np type to node type vote, [cat,node_label_num],
-                            example: node label num=2 cat = 4
-                            nlabel    0,1         
-                            cat = 0 [[0,0],
-                            cat = 1  [1,0],
-                            cat = 2  [1,1],
-                            cat = 3  [0,1]]
-        np_vote_node_label :: each node pair vote for the src node's type according to the np type [NP,node_label_num]
-    '''
-    # calculate the node pair accuracy
-    node_pair_acc = np_pred.argmax(dim=1).eq(np_label).float().mean()
-    # calculate the node accuracy
-    np_pred = np_pred.argmax(dim=1) # [NP,]
-    np_vote_node_label = mapping_matrix[np_pred].view(node_num,node_num,-1)
-    node_pred = np_vote_node_label.sum(dim=1).argmax(dim=1) # node_pred :: reshape the np_vote_node_label to [N,N,node_label_num] 
-                                                            # and sum by the dim=1 and get a tensor of [N, nodel_label_num] 
-                                                            # then apply argmax get [N,] node label pred
-    node_acc = node_pred.eq(node_label).float().mean()
-    return node_pair_acc,node_acc
-
 
 def train(models,src_dataloader,tgt_dataloader,
                 source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
@@ -186,10 +161,49 @@ def train(models,src_dataloader,tgt_dataloader,
         loss.backward()
         optimizer.step()
 
-if __name__ == "__main__":
-    # #print all value
-    # torch.set_printoptions(profile="full")
+def evaluate(np_pred,np_label,mapping_matrix,node_label): 
+    '''
+    require
+        np_pred :: prediction for node pair  [NP,cat]
+        np_label :: ground truth for node pair [NP,1]
+        mapping_matrix :: mapping from np type to node type vote, [cat,node_label_num],
+                            example: node label num=2 cat = 4
+                            nlabel    0,1         
+                            cat = 0 [[0,0],
+                            cat = 1  [1,0],
+                            cat = 2  [1,1],
+                            cat = 3  [0,1]]
+        np_vote_node_label :: each node pair vote for the src node's type according to the np type [NP,node_label_num]
+    '''
+    # calculate the node pair corrects
+    node_pair_acc = np_pred.argmax(dim=1).eq(np_label).float().mean()
+    #node_pair_correct = np_pred.argmax(dim=1).eq(np_label).sum()
+    # calculate the node accuracy
+    np_pred = np_pred.argmax(dim=1) # [NP,]
+    np_vote_node_label = mapping_matrix[np_pred].view(node_num,node_num,-1)
+    node_pred = np_vote_node_label.sum(dim=1).argmax(dim=1) # node_pred :: reshape the np_vote_node_label to [N,N,node_label_num] 
+                                                            # and sum by the dim=1 and get a tensor of [N, nodel_label_num] 
+                                                            # then apply argmax get [N,] node label pred
+    node_acc = node_pred.eq(node_label).float().mean()
+    #node_correct = node_pred.eq(node_label).sum()
+    return node_pair_correct,node_correct
 
+def validate(model,node_feat,node_label,edge_index,all_node_pair,all_node_pair_label,mapping_matrix,domain,rate):
+    # TODO check whether is correct
+    # TODO generate the src_test_np
+    model.eval()
+    np_num = all_node_pair.shape[0]//2 # to avoid oom
+    _,np_pred1,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),all_node_pair[:np_num],domain,rate)
+    _,np_pred2,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),all_node_pair[np_num:],domain,rate)
+    np_pred = torch.cat(np_pred1,np_pred2)
+    node_pair_acc,node_acc = evaluate(np_pred,all_node_pair_label,mapping_matrix,node_label)
+
+    return node_acc,node_pair_acc
+
+if __name__ == "__main__":
+    ###################################################
+    ######                args                #########
+    ###################################################
     device = 'cuda'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     parser = ArgumentParser()
     parser.add_argument("--source", type=str, default='acm')
@@ -272,9 +286,9 @@ if __name__ == "__main__":
     ## dataloader
     source_np_dataset = Node_Pair_Dataset(src_all_node_pair,src_all_node_pair_label)
     target_np_dataset = Node_Pair_Dataset(tgt_all_node_pair,tgt_all_node_pair_label)
-    src_dataloader = DataLoader(source_np_dataset, batch_size=8192,
+    src_dataloader = DataLoader(source_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
-    tgt_dataloader = DataLoader(target_np_dataset, batch_size=8192,
+    tgt_dataloader = DataLoader(target_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4) 
     ## model
     
@@ -285,8 +299,9 @@ if __name__ == "__main__":
     models = MRVAEDA(input_dim,hidden_dim,categorical_dim,device).to(device)
     optimizer = torch.optim.Adam(models.parameters(), lr=3e-3)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,np.arange(1,200,50), gamma=0.1, last_epoch=-1)
-
-    ## training
+    ###################################################
+    ######                training            #########
+    ###################################################
     for epoch in range(args.epochs): # start from 0
         models.train()
         rate = min((epoch + 1) / args.epochs, 0.05)
@@ -297,15 +312,13 @@ if __name__ == "__main__":
         print('time used:',time.time()-t)
 
         ## validate
-        models.eval()
-        ## for src only test node pairs are used; for tgt the whole graph is used 
-        # TODO check whether is correct
-        # TODO generate the src_test_np
-        _,src_A_pred,_,_,_,_ = models(source_node_feat.to(device), src_edge_index_sl.to(device),src_all_node_pair,'source',rate)
-        _,tgt_A_pred,_,_,_,_ = models(target_node_feat.to(device), tgt_edge_index_sl.to(device),tgt_all_node_pair,'target',rate)
-        src_np_acc,src_node_acc = evaluate(src_A_pred,src_all_node_pair_label,mapping_matrix,source_node_label)
-        tgt_np_acc,tgt_node_acc = evaluate(tgt_A_pred,tgt_all_node_pair_label,mapping_matrix,target_node_label)
-        print(src_np_acc,src_node_acc)
-        print(tgt_np_acc,tgt_node_acc)
+        src_node_acc,src_node_pair_acc=validate(models,source_node_feat,source_node_label,src_edge_index_sl,
+                                                        src_all_node_pair,src_all_node_pair_label,mapping_matrix,'source',rate)
+        tgt_node_acc,tgt_node_pair_acc=validate(models,target_node_feat,target_node_label,tgt_edge_index_sl,
+                                                        tgt_all_node_pair,tgt_all_node_pair_label,mapping_matrix,'target',rate)
+        print(src_node_acc,src_node_pair_acc)
+        print(tgt_node_acc,tgt_node_pair_acc)
+
+
         
     print('------------End of training----------')
