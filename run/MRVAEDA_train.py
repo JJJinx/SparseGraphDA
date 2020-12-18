@@ -11,10 +11,9 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import Dataset, DataLoader
 
-from dataset.DomainData import DomainData
-from data_vis import degree_level_acc
+from data_processing.DomainData import DomainData
+from data_processing.data_process import *
 from model.MRVGAE_model import *
-from data_process import *
 
 class Node_Pair_Dataset(Dataset):
     def __init__(self,node_pairs,node_pair_labels):

@@ -2,9 +2,8 @@ import dgl
 import torch
 import torch.nn as nn
 import os
-from DomainData import DomainData
-from data_process import *
-
+from data_processing.DomainData import DomainData
+from data_processing.data_process import *
 
 mapping_matrix = torch.tensor([
                   [0,0],

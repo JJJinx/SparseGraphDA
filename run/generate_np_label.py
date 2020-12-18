@@ -8,8 +8,7 @@ import numpy as np
 from torch import nn
 from argparse import ArgumentParser
 from data_processing.DomainData import DomainData
-from data_process import *
-
+from data_processing.data_process import *
 # TODO 查看是否每次生成的数据集是否会改变NP标签的顺序之类的
 
 
