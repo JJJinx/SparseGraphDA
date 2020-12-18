@@ -48,16 +48,8 @@ def generate_all_node_pair(node_num,edge_index,node_label,node_label_num,adj):
     max_np_label = all_node_pair_label.max()
     all_node_pair_label = all_node_pair_label*adj.to_dense().type(torch.int32)
     #all_node_pair_label = ((int(node_label_num)+int(node_label_num)-(src-1))*((src-1)+1)/2+(dst-src)+1)*adj.to_dense().numpy()
-    '''
-    for node_pair in edge_index:
-        src = node_pair[0]  #source node index
-        dst = node_pair[1]  #destination node index
-        ntype_pair = [node_label[src],node_label[dst]] # [souce node type,destination node type]
-        node_pair_label = ntype_etype_mapping[ntype_pair] # this node pair's label, looking up from the dict
-        # return the corresponding index of this node pair in all_node_pair
-        i = torch.nonzero(torch.all(torch.eq(all_node_pair,node_pair),dim=-1))
-        all_node_pair_label[i] = node_pair_label # value this node_pair's type
-    '''
+    
+
     return all_node_pair,all_node_pair_label,max_np_label
 
 def generate_mapping_M(node_label_num,np_type_num):

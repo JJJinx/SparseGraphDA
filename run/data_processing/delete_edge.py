@@ -4,8 +4,8 @@ import numpy as np
 
 
 
-def dele_fun(data_path,raw_path,name):
-    rate = 1
+def dele_fun(data_path,raw_path,name,idx):
+    rate = 0.6
     filename = name+'_edgelist.txt'
     edge_mat =[]
     with open(os.path.join(raw_path,filename),"r") as f:
@@ -19,7 +19,7 @@ def dele_fun(data_path,raw_path,name):
     sampled_edge_mat = edge_mat[sample_index]
 
     ##判断是否存在删除边后的文件夹，不存在就创建
-    new_name = 'del_'+name+str(rate)+'_3'
+    new_name = 'del_'+name+str(rate)+'_'+str(idx)
     new_path = os.path.join(data_path,new_name)
     new_raw_path = os.path.join(new_path,'raw')
     isnpExist=os.path.exists(new_path)
@@ -116,12 +116,12 @@ if __name__ == "__main__":
     if choice == 'acm':
         acm_path = os.path.join(data_path,'acm')
         acm_raw_path = os.path.join(acm_path,'raw')
-        #dele_fun(data_path,acm_raw_path,'acm')
-        input_list = [data_path,acm_raw_path,'acm']
-        classify_and_del_edge(input_list)
+        dele_fun(data_path,acm_raw_path,'acm',1)
+        # input_list = [data_path,acm_raw_path,'acm']
+        # classify_and_del_edge(input_list)
     if choice == 'dblp':
         dblp_path = os.path.join(data_path,'dblp')
         dblp_raw_path = os.path.join(dblp_path,'raw')
-        #dele_fun(data_path,dblp_raw_path,'dblp')
-        input_list = [data_path,dblp_raw_path,'dblp']
-        classify_and_del_edge(input_list)
+        dele_fun(data_path,dblp_raw_path,'dblp',3)
+        # input_list = [data_path,dblp_raw_path,'dblp']
+        # classify_and_del_edge(input_list)

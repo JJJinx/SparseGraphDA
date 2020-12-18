@@ -46,7 +46,6 @@ class DomainData(InMemoryDataset):
 
         self.data, self.slices = torch.load(self.processed_paths[0])
 
-
     @property
     def raw_file_names(self):
         return ["docs.txt", "edgelist.txt", "labels.txt"]

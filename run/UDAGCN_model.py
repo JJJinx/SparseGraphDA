@@ -1,6 +1,6 @@
 # coding=utf-8
 import torch
-from cached_gcn_conv import CachedGCNConv,PPMIConv
+from layers import CachedGCNConv,PPMIConv
 from torch import nn
 import torch.nn.functional as F
 

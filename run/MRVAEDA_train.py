@@ -1,7 +1,4 @@
 # coding=utf-8
-import sys
-sys.path.append(r'C:\Users\41851\Desktop\SparseGraphDA')
-
 import os
 import time
 import itertools
@@ -17,7 +14,7 @@ from torch.utils.data import Dataset, DataLoader
 
 from data_processing.DomainData import DomainData
 from data_processing.data_process import *
-from model.MRVGAE_model import *
+from MRVGAE_model import *
 
 class Node_Pair_Dataset(Dataset):
     def __init__(self,node_pairs,node_pair_labels):
@@ -164,6 +161,7 @@ def train(models,src_dataloader,tgt_dataloader,
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
+    del src_batch_np,tgt_batch_np
 
 def evaluate(np_pred,np_label,mapping_matrix,node_label): 
     '''
@@ -192,14 +190,14 @@ def evaluate(np_pred,np_label,mapping_matrix,node_label):
     #node_correct = node_pred.eq(node_label).sum()
     return node_pair_correct,node_correct
 
-def validate(model,node_feat,node_label,edge_index,all_node_pair,all_node_pair_label,mapping_matrix,domain,rate):
+def validate(models,dataloader,all_node_pair_label,mapping_matrix,node_feat,node_label,edge_index,domain,device,rate):
     # TODO check whether is correct
     # TODO generate the src_test_np
-    model.eval()
-    np_num = all_node_pair.shape[0]//2 # to avoid oom
-    _,np_pred1,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),all_node_pair[:np_num],domain,rate)
-    _,np_pred2,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),all_node_pair[np_num:],domain,rate)
-    np_pred = torch.cat(np_pred1,np_pred2)
+    models.eval()
+    np_pred = torch.tensor([])
+    for src_batch_np,_ in src_dataloader:
+        _,np_pred_temp,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),src_batch_np.to(device),domain,rate)
+        np_pred = torch.cat((np_pred,np_pred_temp.cpu().detach()),dim=0)
     node_pair_acc,node_acc = evaluate(np_pred,all_node_pair_label,mapping_matrix,node_label)
 
     return node_acc,node_pair_acc
@@ -215,7 +213,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int,default=200)
     parser.add_argument("--lr", type=float,default=0.001)
     parser.add_argument("--epochs", type=int,default=1)
-    parser.add_argument("--batch_size", type=int,default=65536)
+    parser.add_argument("--batch_size", type=int,default=1024)
 
     args = parser.parse_args()
     seed = args.seed
@@ -294,6 +292,9 @@ if __name__ == "__main__":
                             shuffle=True, num_workers=4)
     tgt_dataloader = DataLoader(target_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4) 
+    
+
+
     ## model
     
     input_dim = dataset.num_features
@@ -316,13 +317,13 @@ if __name__ == "__main__":
         print('time used:',time.time()-t)
 
         ## validate
-        src_node_acc,src_node_pair_acc=validate(models,source_node_feat,source_node_label,src_edge_index_sl,
-                                                        src_all_node_pair,src_all_node_pair_label,mapping_matrix,'source',rate)
-        tgt_node_acc,tgt_node_pair_acc=validate(models,target_node_feat,target_node_label,tgt_edge_index_sl,
-                                                        tgt_all_node_pair,tgt_all_node_pair_label,mapping_matrix,'target',rate)
+        src_node_acc,src_node_pair_acc=validate(models,src_dataloader,src_all_node_pair_label,mapping_matrix,
+                                                source_node_feat,source_node_label,src_edge_index_sl,
+                                                'source',device,rate)
+        tgt_node_acc,tgt_node_pair_acc=validate(models,tgt_dataloader,tgt_all_node_pair_label,mapping_matrix,
+                                                target_node_feat,target_node_label,tgt_edge_index_sl,
+                                                'target',device,rate)
         print(src_node_acc,src_node_pair_acc)
         print(tgt_node_acc,tgt_node_pair_acc)
 
-
-        
     print('------------End of training----------')

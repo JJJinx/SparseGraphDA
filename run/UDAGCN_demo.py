@@ -10,7 +10,7 @@ from torch import nn
 import torch.nn.functional as F
 import itertools
 from argparse import ArgumentParser
-from model.cached_gcn_conv import CachedGCNConv,PPMIConv
+from layer import CachedGCNConv,PPMIConv
 from data_processing.DomainData import DomainData
 from util.data_vis import degree_level_acc
 
@@ -22,8 +22,8 @@ from util.data_vis import degree_level_acc
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument("--source", type=str, default='acm')
-parser.add_argument("--target", type=str, default='ratiodel_dblp0.4_1')
+parser.add_argument("--source", type=str, default='dblp')
+parser.add_argument("--target", type=str, default='del_acm0.6_1')
 parser.add_argument("--name", type=str, default='UDAGCN')
 parser.add_argument("--seed", type=int,default=200)
 parser.add_argument("--UDAGCN", type=bool,default=True)
@@ -281,9 +281,12 @@ for epoch in range(1, epochs):
         best_epoch = epoch
 #创建文件夹
 if transfer:
-    data_vis_path = './datastastic/degree_related_acc/{}2{}/'.format(args.source,args.target)
+    if use_UDAGCN==True:
+        data_vis_path = './statistic_visual_result/degree_related_acc/{}2{}/'.format(args.source,args.target)
+    if use_UDAGCN==False:
+        data_vis_path = './statistic_visual_result/degree_related_acc/{}2{}gcn/'.format(args.source,args.target)
 else:
-    data_vis_path = './datastastic/degree_related_acc/{}2{}noda/'.format(args.source,args.target)
+    data_vis_path = './statistic_visual_result/degree_related_acc/{}2{}noda/'.format(args.source,args.target)
 print(data_vis_path)
 isnrpExist=os.path.exists(data_vis_path)
 # print(isnrpExist,data_vis_path)
