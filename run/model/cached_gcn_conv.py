@@ -9,6 +9,7 @@ from torch_geometric.utils import add_remaining_self_loops
 from torch_geometric.nn.inits import glorot, zeros
 
 
+
 class CachedGCNConv(MessagePassing):
     r"""The graph convolutional operator from the `"Semi-supervised
     Classification with Graph Convolutional Networks"

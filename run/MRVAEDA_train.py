@@ -1,4 +1,7 @@
 # coding=utf-8
+import sys
+sys.path.append(r'C:\Users\41851\Desktop\SparseGraphDA')
+
 import os
 import time
 import itertools
@@ -6,6 +9,7 @@ from argparse import ArgumentParser
 import random
 import numpy as np
 
+import dgl
 import torch
 from torch import nn
 import torch.nn.functional as F

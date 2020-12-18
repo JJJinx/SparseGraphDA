@@ -3,7 +3,6 @@ from torch import nn
 import dgl
 import dgl.nn.pytorch as dglnn
 from cached_gcn_conv import CachedGCNConv
-
 '''
 DGL GCN ENCODER
 class private_encoder(nn.Module):
