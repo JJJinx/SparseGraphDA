@@ -123,24 +123,19 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
     indice =  torch.randperm(tgt_np_neg_label_idx.shape[0])[:tgt_neg_np_num]
     tgt_np_neg_label_idx = tgt_np_neg_label_idx[indice]
 
-    print(tgt_all_node_pair_label.shape)
-    print(tgt_np_pos_label_idx.shape)
-    print(tgt_all_node_pair_label[tgt_np_pos_label_idx[:,0],tgt_np_pos_label_idx[:,1]].shape)
-    raise RuntimeError
-
-    src_node_pair = torch.cat(src_pos_np_pos_label).to(device)
-    tgt_node_pair = ().to(device)
-    src_batch_np_label = src_all_node_pair_label[].to(device)
-    tgt_batch_np_label = tgt_batch_np_label.to(device)
+    src_node_pair = torch.cat((src_np_pos_label_idx,src_np_neg_label_idx))
+    tgt_node_pair = torch.cat((tgt_np_pos_label_idx,tgt_np_neg_label_idx))
+    src_np_label = src_all_node_pair_label[src_node_pair[:,0],src_node_pair[:,1]]
+    tgt_np_label = tgt_all_node_pair_label[tgt_node_pair[:,0],tgt_node_pair[:,1]]
     ## build the reconstruction target
-    src_recon_label = source_node_feat[src_batch_np[:,0]]+ source_node_feat[src_batch_np[:,1]]
-    tgt_recon_label = target_node_feat[tgt_batch_np[:,0]]+ target_node_feat[tgt_batch_np[:,1]]
+    src_recon_label = source_node_feat[src_node_pair[:,0]]+ source_node_feat[src_node_pair[:,1]]
+    tgt_recon_label = target_node_feat[tgt_node_pair[:,0]]+ target_node_feat[tgt_node_pair[:,1]]
     ## put into the model
-    src_batch_np = src_batch_np.to(device)
-    tgt_batch_np = tgt_batch_np.to(device)
+    src_node_pair = src_node_pair.to(device)
+    tgt_node_pair = tgt_node_pair.to(device)
     # TODO  加入随epoch自适应的temp参数
-    src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_batch_np,'source',rate)
-    tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_batch_np,'target',rate)
+    src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_node_pair,'source',rate)
+    tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_node_pair,'target',rate)
     ## source domain cls focal loss
     focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
     loss_cls = focal_loss(src_A_pred,src_batch_np_label)
@@ -180,7 +175,6 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
             'loss_recon:',loss_recon.item(),
             'loss_da:',loss_da.item(),
             'loss_kl:',loss_kl.item())
-    del src_batch_np,tgt_batch_np
 
 def evaluate(np_pred,np_label,mapping_matrix,node_label): 
     '''
@@ -230,7 +224,7 @@ if __name__ == "__main__":
     parser.add_argument("--target", type=str, default='dblp')
     parser.add_argument("--seed", type=int,default=200)
     parser.add_argument("--lr", type=float,default=0.001)
-    parser.add_argument("--epochs", type=int,default=1)
+    parser.add_argument("--epochs", type=int,default=500)
     parser.add_argument("--batch_size", type=int,default=65536)
 
     args = parser.parse_args()
@@ -333,17 +327,18 @@ if __name__ == "__main__":
         #         source_node_feat.to(device),src_edge_index_sl.to(device),
         #         target_node_feat.to(device),tgt_edge_index_sl.to(device),device)
         print('train_time used:',time.time()-t)
-
-        ## validate
-        t = time.time()
-        src_node_acc,src_node_pair_acc=validate(models,src_dataloader,src_all_node_pair_label,mapping_matrix,
-                                                source_node_feat,source_node_label,src_edge_index_sl,
-                                                'source',device,rate)
-        tgt_node_acc,tgt_node_pair_acc=validate(models,tgt_dataloader,tgt_all_node_pair_label,mapping_matrix,
-                                                target_node_feat,target_node_label,tgt_edge_index_sl,
-                                                'target',device,rate)
-        print('source node acc:{},source node pair acc:{},target node acc:{},target node pair acc:{}'\
-                .format(src_node_acc,src_node_pair_acc,tgt_node_acc,tgt_node_pair_acc))
-        print('val_time used:',time.time()-t)
+        
+        if (epoch+1) %10 == 0:
+            ## validate
+            t = time.time()
+            src_node_acc,src_node_pair_acc=validate(models,src_dataloader,src_all_node_pair_label,mapping_matrix,
+                                                    source_node_feat,source_node_label,src_edge_index_sl,
+                                                    'source',device,rate)
+            tgt_node_acc,tgt_node_pair_acc=validate(models,tgt_dataloader,tgt_all_node_pair_label,mapping_matrix,
+                                                    target_node_feat,target_node_label,tgt_edge_index_sl,
+                                                    'target',device,rate)
+            print('source node acc:{},source node pair acc:{},target node acc:{},target node pair acc:{}'\
+                    .format(src_node_acc,src_node_pair_acc,tgt_node_acc,tgt_node_pair_acc))
+            print('val_time used:',time.time()-t)
 
     print('------------End of training----------')
