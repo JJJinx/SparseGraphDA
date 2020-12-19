@@ -10,7 +10,7 @@ from torch import nn
 import torch.nn.functional as F
 import itertools
 from argparse import ArgumentParser
-from layer import CachedGCNConv,PPMIConv
+from layers import CachedGCNConv,PPMIConv
 from data_processing.DomainData import DomainData
 from util.data_vis import degree_level_acc
 

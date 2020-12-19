@@ -17,14 +17,14 @@ from data_processing.data_process import *
 from MRVGAE_model import *
 
 class Node_Pair_Dataset(Dataset):
-    def __init__(self,node_pairs,node_pair_labels):
+    def __init__(self,node_num,node_pair_labels):
         super(Node_Pair_Dataset, self).__init__()
-        self.x = node_pairs # shape [N,2]
-        self.y = node_pair_labels # shape [N,]
+        self.src_node_idx = torch.arange(node_num) # shape [N,] the index for nodes
+        self.node_pair_label = node_pair_labels # shape [N,N]
     def __getitem__(self,index):
-        return self.x[index],self.y[index]
+        return self.src_node_idx[index],self.node_pair_label[index]
     def __len__(self):
-        return self.x.shape[0]
+        return self.src_node_idx.shape[0] # sample along the src node dim
 
 ## TODO the da is discriminate the hidden embedding instead of the reconstruction result
 class MRVAEDA(torch.nn.Module):
@@ -101,15 +101,25 @@ class FocalLoss(nn.Module):
 def train(models,src_dataloader,tgt_dataloader,
                 source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
     for batch_idx,data in enumerate(zip(src_dataloader,tgt_dataloader)):
-        # TODO 在data process中将正负样本分开来，或者得到正负样本分别的index list
-        # 每个批次有大量的负样本，也就是没有边的样本 1024中仅有30个左右正样本
-        #能否改进采样方法，使得每次采样正负样本数量相同
         ## get the output from dataloader
         # node pair [src_node_index,dst_node_index]
-        src_batch_np,src_batch_np_label = data[0]
-        tgt_batch_np,tgt_batch_np_label = data[1]
-        src_batch_np = src_batch_np.to(device)
-        tgt_batch_np = tgt_batch_np.to(device)
+        src_batch_snodes,src_batch_np_label = data[0]
+        tgt_batch_snodes,tgt_batch_np_label = data[1]
+        '''
+        TODO next
+        now we have the src nodes and corresponding [src-*] node pair labels
+        '''
+        print(src_batch_snodes)
+        print(src_batch_np_label.shape)
+        src_batch_np_neg_label_idx = torch.where(src_batch_np_label==0)
+        tgt_batch_np_neg_label_idx = torch.where(tgt_batch_np_label==0)
+        print(src_batch_np_neg_label_idx)
+        raise RuntimeError
+
+
+
+        # src_batch_np = src_batch_np.to(device)
+        # tgt_batch_np = tgt_batch_np.to(device)
         ## make one hot label
         src_batch_np_label = src_batch_np_label.to(device)
         tgt_batch_np_label = tgt_batch_np_label.to(device)
@@ -156,11 +166,11 @@ def train(models,src_dataloader,tgt_dataloader,
         optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-    print('loss_cls:',loss_cls.item(),
-        'loss_recon:',loss_recon.item(),
-        'loss_da:',loss_da.item(),
-        'loss_kl:',loss_kl.item())
-    
+    print('loss',loss.item(),
+            'loss_cls:',loss_cls.item(),
+            'loss_recon:',loss_recon.item(),
+            'loss_da:',loss_da.item(),
+            'loss_kl:',loss_kl.item())
     del src_batch_np,tgt_batch_np
 
 def evaluate(np_pred,np_label,mapping_matrix,node_label): 
@@ -189,12 +199,11 @@ def evaluate(np_pred,np_label,mapping_matrix,node_label):
                                                             # then apply argmax get [N,] node label pred
     node_acc = node_pred.eq(node_label).float().mean()
     #node_correct = node_pred.eq(node_label).sum()
-    return node_pair_acc,node_acc
+    return node_pair_correct,node_correct
 
 def validate(models,dataloader,all_node_pair_label,mapping_matrix,node_feat,node_label,edge_index,domain,device,rate):
-    # TODO generate the src_test_np
     models.eval()
-    np_pred = torch.tensor([]).cpu()
+    np_pred = torch.tensor([])
     for batch_np,_ in dataloader:
         _,np_pred_temp,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),batch_np.to(device),domain,rate)
         np_pred = torch.cat((np_pred,np_pred_temp.cpu().detach()),dim=0)
@@ -212,8 +221,8 @@ if __name__ == "__main__":
     parser.add_argument("--target", type=str, default='dblp')
     parser.add_argument("--seed", type=int,default=200)
     parser.add_argument("--lr", type=float,default=0.001)
-    parser.add_argument("--epochs", type=int,default=100)
-    parser.add_argument("--batch_size", type=int,default=65536)
+    parser.add_argument("--epochs", type=int,default=1)
+    parser.add_argument("--batch_size", type=int,default=4)
 
     args = parser.parse_args()
     seed = args.seed
@@ -268,34 +277,31 @@ if __name__ == "__main__":
     source_node_label = source_data.y
     target_node_label = target_data.y
     del source_data,target_data
-    src_all_node_pair,src_all_node_pair_label,max_np_label =generate_all_node_pair(source_node_num,src_edge_index_sl,source_node_label,
-                                                                                    node_label_num,source_graph.adjacency_matrix()) # tensor,tensor
-    src_all_node_pair = src_all_node_pair.view(-1,2)
-    src_all_node_pair_label = src_all_node_pair_label.view(-1)
-    tgt_all_node_pair,tgt_all_node_pair_label,max_np_label = generate_all_node_pair(target_node_num,tgt_edge_index_sl,target_node_label,
-                                                                                    node_label_num,target_graph.adjacency_matrix())
-    tgt_all_node_pair = tgt_all_node_pair.view(-1,2)
-    tgt_all_node_pair_label = tgt_all_node_pair_label.view(-1)
+    '''
+    require:
+        we dont need all_node_pair this time since it can be get by using node's index
+        all_node_pair_label: [N,N] 
+        max_np_label: the max label we get for np 
+    '''
+    src_all_node_pair_label,max_np_label = generate_all_node_pair_adj(source_node_num,src_edge_index_sl,source_node_label,
+                                                                        node_label_num,source_graph.adjacency_matrix())
 
+    tgt_all_node_pair_label,max_np_label = generate_all_node_pair_adj(target_node_num,tgt_edge_index_sl,target_node_label,
+                                                                        node_label_num,target_graph.adjacency_matrix())
     min_np_label = 0 # no_edge_existence
     max_np_label = max_np_label.item() 
     categorical_dim = max_np_label-min_np_label+1
-
     mapping_matrix = generate_mapping_M(node_label_num,categorical_dim)
     #np.savetxt('acm_all_node_pair_label.csv',src_all_node_pair_label.numpy(),delimiter=',')
     #np.savetxt('dblp_all_node_pair_label.csv',tgt_all_node_pair_label.numpy(),delimiter=',')
     ## dataloader
-    source_np_dataset = Node_Pair_Dataset(src_all_node_pair,src_all_node_pair_label)
-    target_np_dataset = Node_Pair_Dataset(tgt_all_node_pair,tgt_all_node_pair_label)
+    source_np_dataset = Node_Pair_Dataset(source_node_num,src_all_node_pair_label)
+    target_np_dataset = Node_Pair_Dataset(target_node_num,tgt_all_node_pair_label)
     src_dataloader = DataLoader(source_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4)
     tgt_dataloader = DataLoader(target_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4) 
-    
-
-
     ## model
-    
     input_dim = dataset.num_features
     hidden_dim = [1024     ,1024     ,32*categorical_dim ,32                             ,64               ,256             ]
     #              0         1            2                3                               4                 5
@@ -326,4 +332,5 @@ if __name__ == "__main__":
         print('source node acc:{},source node pair acc:{},target node acc:{},target node pair acc:{}'\
                 .format(src_node_acc,src_node_pair_acc,tgt_node_acc,tgt_node_pair_acc))
         print('val_time used:',time.time()-t)
+
     print('------------End of training----------')

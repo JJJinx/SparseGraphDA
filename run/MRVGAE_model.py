@@ -76,7 +76,7 @@ class VI(nn.Module):
         if self.type == 'Both':
             mean = self.mean(H)  # [node_pair_num,dn*cat_dim]
             logstd = self.logstd(H)
-            gausian_noise = torch.randn(mean.size(0),mean.size(1)).to(self.device)
+            gausian_noise = torch.randn_like(mean)
             N = gausian_noise*torch.exp(logstd) + mean   # [node_pair_num,dn*cat_dim]
             N = N.view(H.shape[0],self.cat,-1) #[node_pair_num,cat_dim,dN]
 
