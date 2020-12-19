@@ -54,6 +54,7 @@ class MRVAEDA(torch.nn.Module):
         # h_dst = h[node_pair[:,1]]  # [batch_size,dh]
         # h_src = h_src.unsqueeze(0).repeat(h.shape[0],1,1) #[N_i,N_j,Dh]
         # h_dst = h_dst.unsqueeze(1).repeat(1,h.shape[0],1) #[N_i,N_j,Dh]
+        print(2,node_pair.shape)
         hadd = h[node_pair[:,0]]+h[node_pair[:,1]]
         M,mean,logstd,q = self.VI(hadd,temp = 0.5)
         x_recon = self.shared_decoder(M)
@@ -100,7 +101,7 @@ class FocalLoss(nn.Module):
 
 
 def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge_index,
-                src_all_node_pair_label,tgt_all_node_pair_label,device):
+                src_all_node_pair_label,tgt_all_node_pair_label,device,args):
     '''
     all node pair label :: [N,N] label matric in the adj format for node pairs
     np_pos_label_idx :: positive node pairs' index in the adj format matrix
@@ -114,8 +115,8 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
     tgt_pos_np_num = tgt_np_pos_label_idx.shape[0]
 
     ## apply negtive sampling
-    src_neg_np_num = 65536-src_pos_np_num
-    tgt_neg_np_num = 65536-tgt_pos_np_num
+    src_neg_np_num = args.batch_size-src_pos_np_num
+    tgt_neg_np_num = args.batch_size-tgt_pos_np_num
     src_np_neg_label_idx = torch.stack(torch.where(src_all_node_pair_label==0)).T
     tgt_np_neg_label_idx = torch.stack(torch.where(tgt_all_node_pair_label==0)).T
     indice =  torch.randperm(src_np_neg_label_idx.shape[0])[:src_neg_np_num]
@@ -126,19 +127,20 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
     src_node_pair = torch.cat((src_np_pos_label_idx,src_np_neg_label_idx))
     tgt_node_pair = torch.cat((tgt_np_pos_label_idx,tgt_np_neg_label_idx))
     src_np_label = src_all_node_pair_label[src_node_pair[:,0],src_node_pair[:,1]]
-    tgt_np_label = tgt_all_node_pair_label[tgt_node_pair[:,0],tgt_node_pair[:,1]]
-    ## build the reconstruction target
+    #tgt_np_label = tgt_all_node_pair_label[tgt_node_pair[:,0],tgt_node_pair[:,1]]
+    ## build the reconstruction target ##主要是这一步有大量的GPU使用
     src_recon_label = source_node_feat[src_node_pair[:,0]]+ source_node_feat[src_node_pair[:,1]]
     tgt_recon_label = target_node_feat[tgt_node_pair[:,0]]+ target_node_feat[tgt_node_pair[:,1]]
     ## put into the model
     src_node_pair = src_node_pair.to(device)
     tgt_node_pair = tgt_node_pair.to(device)
+    print(1,src_node_pair.shape)
     # TODO  加入随epoch自适应的temp参数
     src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_node_pair,'source',rate)
     tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_node_pair,'target',rate)
     ## source domain cls focal loss
     focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
-    loss_cls = focal_loss(src_A_pred,src_batch_np_label)
+    loss_cls = focal_loss(src_A_pred,src_np_label.to(device))
 
     ## reconstruction loss
     loss_recon = torch.nn.functional.l1_loss(src_X_recon,src_recon_label)+ torch.nn.functional.l1_loss(tgt_X_recon,tgt_recon_label)
@@ -322,12 +324,12 @@ if __name__ == "__main__":
         # during training we use the negtive sampling and do not use the dataloader 
         train(models,source_node_feat.to(device),target_node_feat.to(device),
                     src_edge_index_sl.to(device),tgt_edge_index_sl.to(device),
-                    src_all_node_pair_label,tgt_all_node_pair_label,device)
+                    src_all_node_pair_label,tgt_all_node_pair_label,device,args)
         # train(models,src_dataloader,tgt_dataloader,
         #         source_node_feat.to(device),src_edge_index_sl.to(device),
         #         target_node_feat.to(device),tgt_edge_index_sl.to(device),device)
         print('train_time used:',time.time()-t)
-        
+
         if (epoch+1) %10 == 0:
             ## validate
             t = time.time()
