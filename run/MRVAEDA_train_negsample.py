@@ -98,74 +98,83 @@ class FocalLoss(nn.Module):
         if self.size_average: return loss.mean()
         else: return loss.sum()
 
-def train(models,src_dataloader,tgt_dataloader,
-                source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
-    for batch_idx,data in enumerate(zip(src_dataloader,tgt_dataloader)):
-        ## get the output from dataloader
-        # node pair [src_node_index,dst_node_index]
-        src_batch_snodes,src_batch_np_label = data[0]
-        tgt_batch_snodes,tgt_batch_np_label = data[1]
-        '''
-        TODO next
-        now we have the src nodes and corresponding [src-*] node pair labels
-        '''
-        print(src_batch_snodes)
-        print(src_batch_np_label.shape)
-        src_batch_np_neg_label_idx = torch.where(src_batch_np_label==0)
-        tgt_batch_np_neg_label_idx = torch.where(tgt_batch_np_label==0)
-        print(src_batch_np_neg_label_idx)
-        raise RuntimeError
 
+def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge_index,
+                src_all_node_pair_label,tgt_all_node_pair_label,device):
+    '''
+    all node pair label :: [N,N] label matric in the adj format for node pairs
+    np_pos_label_idx :: positive node pairs' index in the adj format matrix
+    np_neg_label_idx :: negtive node pairs' index in the adj format matrix
+    pos_np_num :: number of positive node pairs
+    neg_np_num :: number of negtive node pairs 
+    '''
+    src_np_pos_label_idx = torch.stack(torch.where(src_all_node_pair_label!=0)).T
+    tgt_np_pos_label_idx = torch.stack(torch.where(tgt_all_node_pair_label!=0)).T
+    src_pos_np_num = src_np_pos_label_idx.shape[0]
+    tgt_pos_np_num = tgt_np_pos_label_idx.shape[0]
 
+    ## apply negtive sampling
+    src_neg_np_num = 65536-src_pos_np_num
+    tgt_neg_np_num = 65536-tgt_pos_np_num
+    src_np_neg_label_idx = torch.stack(torch.where(src_all_node_pair_label==0)).T
+    tgt_np_neg_label_idx = torch.stack(torch.where(tgt_all_node_pair_label==0)).T
+    indice =  torch.randperm(src_np_neg_label_idx.shape[0])[:src_neg_np_num]
+    src_np_neg_label_idx = src_np_neg_label_idx[indice] # is also the node pair index
+    indice =  torch.randperm(tgt_np_neg_label_idx.shape[0])[:tgt_neg_np_num]
+    tgt_np_neg_label_idx = tgt_np_neg_label_idx[indice]
 
-        # src_batch_np = src_batch_np.to(device)
-        # tgt_batch_np = tgt_batch_np.to(device)
-        ## make one hot label
-        src_batch_np_label = src_batch_np_label.to(device)
-        tgt_batch_np_label = tgt_batch_np_label.to(device)
-        ## build the reconstruction target
-        src_recon_label = source_node_feat[src_batch_np[:,0]]+ source_node_feat[src_batch_np[:,1]]
-        tgt_recon_label = target_node_feat[tgt_batch_np[:,0]]+ target_node_feat[tgt_batch_np[:,1]]
-        ## put into the model
-        src_batch_np = src_batch_np.to(device)
-        tgt_batch_np = tgt_batch_np.to(device)
-        # TODO  加入随epoch自适应的temp参数
-        src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_batch_np,'source',rate)
-        tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_batch_np,'target',rate)
-        ## source domain cls focal loss
-        focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
-        loss_cls = focal_loss(src_A_pred,src_batch_np_label)
+    print(tgt_all_node_pair_label.shape)
+    print(tgt_np_pos_label_idx.shape)
+    print(tgt_all_node_pair_label[tgt_np_pos_label_idx[:,0],tgt_np_pos_label_idx[:,1]].shape)
+    raise RuntimeError
 
-        ## reconstruction loss
-        loss_recon = torch.nn.functional.l1_loss(src_X_recon,src_recon_label)+ torch.nn.functional.l1_loss(tgt_X_recon,tgt_recon_label)
-        #loss_recon = torch.nn.functional.mse_loss(src_X_recon,src_recon_label)+ torch.nn.functional.mse_loss(tgt_X_recon,tgt_recon_label)
-        ## domain discriminator loss
-        source_da_loss = F.cross_entropy(
-            src_domain_pred,
-            torch.zeros(src_domain_pred.size(0),dtype=torch.long).to(device)
-        )
-        target_da_loss = F.cross_entropy(
-            tgt_domain_pred,
-            torch.ones(tgt_domain_pred.size(0),dtype=torch.long).to(device)
-        )
-        loss_da = source_da_loss+target_da_loss
-        ## KL loss
-        mean = torch.cat([src_mean,tgt_mean])
-        logstd = torch.cat([src_logstd,tgt_logstd]) #将正负样本沿dim0拼接后取平均
-        kl_norm= torch.mean(-0.5*torch.sum(1+2*logstd-mean**2-logstd.exp()**2,dim=1),dim=0) 
+    src_node_pair = torch.cat(src_pos_np_pos_label).to(device)
+    tgt_node_pair = ().to(device)
+    src_batch_np_label = src_all_node_pair_label[].to(device)
+    tgt_batch_np_label = tgt_batch_np_label.to(device)
+    ## build the reconstruction target
+    src_recon_label = source_node_feat[src_batch_np[:,0]]+ source_node_feat[src_batch_np[:,1]]
+    tgt_recon_label = target_node_feat[tgt_batch_np[:,0]]+ target_node_feat[tgt_batch_np[:,1]]
+    ## put into the model
+    src_batch_np = src_batch_np.to(device)
+    tgt_batch_np = tgt_batch_np.to(device)
+    # TODO  加入随epoch自适应的temp参数
+    src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_batch_np,'source',rate)
+    tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_batch_np,'target',rate)
+    ## source domain cls focal loss
+    focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
+    loss_cls = focal_loss(src_A_pred,src_batch_np_label)
 
-        q = torch.cat([src_q,tgt_q])
-        q_for_kl = F.softmax(q,dim=1)
-        eps = 1e-20
-        h1 = -q_for_kl*torch.log(q_for_kl + eps)#h(p)
-        h2 = -q_for_kl*np.log(1./categorical_dim) #h(pq)
-        kl_gumbel = torch.mean(torch.sum(h2-h1,dim=1),dim=0)
-        loss_kl = kl_gumbel+kl_norm
-        # backward
-        loss = loss_cls+loss_recon+loss_da+loss_kl
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+    ## reconstruction loss
+    loss_recon = torch.nn.functional.l1_loss(src_X_recon,src_recon_label)+ torch.nn.functional.l1_loss(tgt_X_recon,tgt_recon_label)
+    #loss_recon = torch.nn.functional.mse_loss(src_X_recon,src_recon_label)+ torch.nn.functional.mse_loss(tgt_X_recon,tgt_recon_label)
+    ## domain discriminator loss
+    source_da_loss = F.cross_entropy(
+        src_domain_pred,
+        torch.zeros(src_domain_pred.size(0),dtype=torch.long).to(device)
+    )
+    target_da_loss = F.cross_entropy(
+        tgt_domain_pred,
+        torch.ones(tgt_domain_pred.size(0),dtype=torch.long).to(device)
+    )
+    loss_da = source_da_loss+target_da_loss
+    ## KL loss
+    mean = torch.cat([src_mean,tgt_mean])
+    logstd = torch.cat([src_logstd,tgt_logstd]) #将正负样本沿dim0拼接后取平均
+    kl_norm= torch.mean(-0.5*torch.sum(1+2*logstd-mean**2-logstd.exp()**2,dim=1),dim=0) 
+
+    q = torch.cat([src_q,tgt_q])
+    q_for_kl = F.softmax(q,dim=1)
+    eps = 1e-20
+    h1 = -q_for_kl*torch.log(q_for_kl + eps)#h(p)
+    h2 = -q_for_kl*np.log(1./categorical_dim) #h(pq)
+    kl_gumbel = torch.mean(torch.sum(h2-h1,dim=1),dim=0)
+    loss_kl = kl_gumbel+kl_norm
+    # backward
+    loss = loss_cls+loss_recon+loss_da+loss_kl
+    optimizer.zero_grad()
+    loss.backward()
+    optimizer.step()
     print('loss',loss.item(),
             'loss_cls:',loss_cls.item(),
             'loss_recon:',loss_recon.item(),
@@ -222,7 +231,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int,default=200)
     parser.add_argument("--lr", type=float,default=0.001)
     parser.add_argument("--epochs", type=int,default=1)
-    parser.add_argument("--batch_size", type=int,default=4)
+    parser.add_argument("--batch_size", type=int,default=65536)
 
     args = parser.parse_args()
     seed = args.seed
@@ -316,9 +325,13 @@ if __name__ == "__main__":
         models.train()
         rate = min((epoch + 1) / args.epochs, 0.05)
         t = time.time()
-        train(models,src_dataloader,tgt_dataloader,
-                source_node_feat.to(device),src_edge_index_sl.to(device),
-                target_node_feat.to(device),tgt_edge_index_sl.to(device),device)
+        # during training we use the negtive sampling and do not use the dataloader 
+        train(models,source_node_feat.to(device),target_node_feat.to(device),
+                    src_edge_index_sl.to(device),tgt_edge_index_sl.to(device),
+                    src_all_node_pair_label,tgt_all_node_pair_label,device)
+        # train(models,src_dataloader,tgt_dataloader,
+        #         source_node_feat.to(device),src_edge_index_sl.to(device),
+        #         target_node_feat.to(device),tgt_edge_index_sl.to(device),device)
         print('train_time used:',time.time()-t)
 
         ## validate
