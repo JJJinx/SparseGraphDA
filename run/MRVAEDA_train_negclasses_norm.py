@@ -272,7 +272,7 @@ if __name__ == "__main__":
     tgt_all_node_pair_label = tgt_all_node_pair_label.view(-1)
     categorical_dim = max(max_pos_np_label,max_neg_np_label)-0+1
 
-    mapping_matrix = generate_mapping_M(node_label_num,categorical_dim)
+    mapping_matrix = generate_mapping_M_minus_class(node_label_num,categorical_dim,max_pos_np_label+1)# TODO
     #np.savetxt('acm_all_node_pair_label.csv',src_all_node_pair_label.numpy(),delimiter=',')
     #np.savetxt('dblp_all_node_pair_label.csv',tgt_all_node_pair_label.numpy(),delimiter=',')
     ## dataloader
@@ -283,10 +283,7 @@ if __name__ == "__main__":
     tgt_dataloader = DataLoader(target_np_dataset, batch_size=args.batch_size,
                             shuffle=True, num_workers=4) 
     
-
-
     ## model
-    
     input_dim = dataset.num_features
     hidden_dim = [1024     ,1024     ,512                ,256                   ,1024      ]
     #              0         1            2                3                     4             

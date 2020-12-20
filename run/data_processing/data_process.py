@@ -121,16 +121,21 @@ def generate_mapping_M(node_label_num,np_type_num):
 ## TODO generate the mapping matrix for considering the minus classes
 def generate_mapping_M_minus_class(node_label_num,np_type_num,pos_np_type_num):
     mapping_M = torch.zeros((np_type_num,node_label_num),dtype=torch.long)
+    
     for src in range(node_label_num):
         for dst in range(node_label_num):
+
             if src > dst:
                 new_src = dst
                 new_dst = src
+
             else:
                 new_src = src
                 new_dst = dst
+
             np_type = int((node_label_num+node_label_num-(new_src-1))*((new_src-1)+1)/2+(new_dst-new_src)+1)-1
-            mapping_M[np_type,src] =1 
+            mapping_M[np_type,src] =1
+    
     mapping_M[pos_np_type_num:,:] = mapping_M[:pos_np_type_num,:]
     print(mapping_M)
     raise RuntimeError
@@ -150,5 +155,5 @@ if __name__ == "__main__":
     #         ntype_etype_mapping[tgt_node_type,src_node_type] = i
     #         i+=1
     max_np_label,node_pair_label,max_pos_np_label,max_neg_np_label = generate_all_node_pair_minus_class(5,edge_index,node_label,3,g.adjacency_matrix())
-    M = generate_mapping_M_minus_class(4,22,11)
+    M = generate_mapping_M_minus_class(3,12,6)
     #print(node_pair_label,max_np_label)
