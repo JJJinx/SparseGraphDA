@@ -101,9 +101,6 @@ class FocalLoss(nn.Module):
 def train(models,src_dataloader,tgt_dataloader,
                 source_node_feat,source_edge_index,target_node_feat,target_edge_index,device):
     for batch_idx,data in enumerate(zip(src_dataloader,tgt_dataloader)):
-        # TODO 在data process中将正负样本分开来，或者得到正负样本分别的index list
-        # 每个批次有大量的负样本，也就是没有边的样本 1024中仅有30个左右正样本
-        #能否改进采样方法，使得每次采样正负样本数量相同
         ## get the output from dataloader
         # node pair [src_node_index,dst_node_index]
         src_batch_np,src_batch_np_label = data[0]
@@ -192,7 +189,6 @@ def evaluate(np_pred,np_label,mapping_matrix,node_label):
     return node_pair_acc,node_acc
 
 def validate(models,dataloader,all_node_pair_label,mapping_matrix,node_feat,node_label,edge_index,domain,device,rate):
-    # TODO generate the src_test_np
     models.eval()
     np_pred = torch.tensor([]).cpu()
     for batch_np,_ in dataloader:
@@ -302,7 +298,7 @@ if __name__ == "__main__":
     #hidden_dim= [gcn1_out ,gcn2_out ,vi_mlp_out         ,decoder_mlp1_in(embedding dim) ,decoder_mlp1_out ,decoder_mlp2_out]
     models = MRVAEDA(input_dim,hidden_dim,categorical_dim,device).to(device)
     optimizer = torch.optim.Adam(models.parameters(), lr=3e-3)
-    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,np.arange(1,200,50), gamma=0.1, last_epoch=-1)
+    scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,np.arange(1,args.batch_size,args.batch_size//4), gamma=0.1, last_epoch=-1)
     ###################################################
     ######                training            #########
     ###################################################

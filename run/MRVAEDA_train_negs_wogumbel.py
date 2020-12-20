@@ -30,15 +30,15 @@ class Node_Pair_Dataset(Dataset):
 class MRVAEDA(torch.nn.Module):
     def __init__(self, in_dim,hidden_dim,categorical_dim,device, **kwargs):
         super(MRVAEDA, self).__init__()
-        self.private_encoder_source = private_encoder(in_dim,hidden_dim[0])
-        self.private_encoder_target = private_encoder(in_dim,hidden_dim[0])
-        self.shared_encoder = shared_encoder(hidden_dim[0],hidden_dim[1])
-        self.VI = VI(hidden_dim[1],hidden_dim[2],categorical_dim,device,distype='Both',**kwargs)
-        self.shared_decoder = shared_decoder(hidden_dim[3],hidden_dim[4])
-        self.private_decoder_source = private_decoder(hidden_dim[4],hidden_dim[5],in_dim) # 2layers
-        self.private_decoder_target = private_decoder(hidden_dim[4],hidden_dim[5],in_dim) # 2layers
-        self.A_classifier = relation_classifier(hidden_dim[3],hidden_dim[3]//2,categorical_dim) #classify the node pair's class
-        self.discriminator = discriminator(hidden_dim[3],hidden_dim[3]//2)
+        self.private_encoder_source = private_encoder(in_dim,hidden_dim[0]) # in:: in_dim / out :: hidden_dim[0]
+        self.private_encoder_target = private_encoder(in_dim,hidden_dim[0]) # in:: in_dim / out :: hidden_dim[0]
+        self.shared_encoder = shared_encoder(hidden_dim[0],hidden_dim[1]) # in :: hidden_dim[0] / out :: hidden_dim[1]
+        self.VI = VI(hidden_dim[1],hidden_dim[2],categorical_dim,device,distype='Norm',**kwargs) # in :: hidden_dim[1] / out :: hidden_dim[2]
+        self.shared_decoder = shared_decoder(hidden_dim[2],hidden_dim[3]) # in :: hidden_dim[2] / out :: hidden_dim[3]
+        self.private_decoder_source = private_decoder(hidden_dim[3],hidden_dim[4],in_dim) # 2layers
+        self.private_decoder_target = private_decoder(hidden_dim[3],hidden_dim[4],in_dim) # 2layers
+        self.A_classifier = relation_classifier(hidden_dim[2],hidden_dim[2]//2,categorical_dim) #classify the node pair's class
+        self.discriminator = discriminator(hidden_dim[2],hidden_dim[2]//2)
     def forward(self, x, edge_index,node_pair,domain,rate):
         '''
             x :: shape [node_num,feat_dim]
@@ -55,17 +55,17 @@ class MRVAEDA(torch.nn.Module):
         # h_src = h_src.unsqueeze(0).repeat(h.shape[0],1,1) #[N_i,N_j,Dh]
         # h_dst = h_dst.unsqueeze(1).repeat(1,h.shape[0],1) #[N_i,N_j,Dh]
         hadd = h[node_pair[:,0]]+h[node_pair[:,1]]
-        M,mean,logstd,q = self.VI(hadd,temp = 0.5)
-        x_recon = self.shared_decoder(M)
+        N,mean,logstd = self.VI(hadd,temp = 0.5)
+        x_recon = self.shared_decoder(N)
         if domain == 'source':
             x_recon = self.private_decoder_source(x_recon)
         if domain == 'target':
             x_recon = self.private_decoder_target(x_recon)
 
-        A_pred = self.A_classifier(M)
-        domain_pred = self.discriminator(M,rate)
+        A_pred = self.A_classifier(N)
+        domain_pred = self.discriminator(N,rate)
 
-        return x_recon,A_pred,domain_pred,mean,logstd,q
+        return x_recon,A_pred,domain_pred,mean,logstd
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
@@ -133,8 +133,8 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
     src_node_pair = src_node_pair.to(device)
     tgt_node_pair = tgt_node_pair.to(device)
     # TODO  加入随epoch自适应的temp参数
-    src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd,src_q = models(source_node_feat, source_edge_index,src_node_pair,'source',rate)
-    tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd,tgt_q = models(target_node_feat, target_edge_index,tgt_node_pair,'target',rate)
+    src_X_recon,src_A_pred,src_domain_pred,src_mean,src_logstd = models(source_node_feat, source_edge_index,src_node_pair,'source',rate)
+    tgt_X_recon,tgt_A_pred,tgt_domain_pred,tgt_mean,tgt_logstd = models(target_node_feat, target_edge_index,tgt_node_pair,'target',rate)
     ## source domain cls focal loss
     focal_loss = FocalLoss(gamma=5).to(device) # there are a lot of classes so we do not give the alpha
     loss_cls = focal_loss(src_A_pred,src_np_label.to(device))
@@ -156,14 +156,7 @@ def train(models,source_node_feat,target_node_feat,source_edge_index,target_edge
     mean = torch.cat([src_mean,tgt_mean])
     logstd = torch.cat([src_logstd,tgt_logstd]) #将正负样本沿dim0拼接后取平均
     kl_norm= torch.mean(-0.5*torch.sum(1+2*logstd-mean**2-logstd.exp()**2,dim=1),dim=0) 
-
-    q = torch.cat([src_q,tgt_q])
-    q_for_kl = F.softmax(q,dim=1)
-    eps = 1e-20
-    h1 = -q_for_kl*torch.log(q_for_kl + eps)#h(p)
-    h2 = -q_for_kl*np.log(1./categorical_dim) #h(pq)
-    kl_gumbel = torch.mean(torch.sum(h2-h1,dim=1),dim=0)
-    loss_kl = kl_gumbel+kl_norm
+    loss_kl = kl_norm
     # backward
     loss = loss_cls+loss_recon+loss_da+loss_kl
     optimizer.zero_grad()
@@ -206,7 +199,7 @@ def validate(models,dataloader,all_node_pair_label,mapping_matrix,node_feat,node
     models.eval()
     np_pred = torch.tensor([])
     for batch_np,_ in dataloader:
-        _,np_pred_temp,_,_,_,_ = models(node_feat.to(device),edge_index.to(device),batch_np.to(device),domain,rate)
+        _,np_pred_temp,_,_,_ = models(node_feat.to(device),edge_index.to(device),batch_np.to(device),domain,rate)
         np_pred = torch.cat((np_pred,np_pred_temp.cpu().detach()),dim=0)
     node_pair_acc,node_acc = evaluate(np_pred,all_node_pair_label.view(-1),mapping_matrix,node_label)# all node pair label is [N,N] 
     return node_acc,node_pair_acc 
@@ -302,9 +295,9 @@ if __name__ == "__main__":
                             shuffle=True, num_workers=4) 
     ## model
     input_dim = dataset.num_features
-    hidden_dim = [1024     ,1024     ,32*categorical_dim ,32                             ,64               ,256             ]
-    #              0         1            2                3                               4                 5
-    #hidden_dim= [gcn1_out ,gcn2_out ,vi_mlp_out         ,decoder_mlp1_in(embedding dim) ,decoder_mlp1_out ,decoder_mlp2_out]
+    hidden_dim = [1024     ,1024     ,    256    ,          512,            1024]
+    #              0         1            2                3                 4
+    #hidden_dim= [gcn1_out ,gcn2_out ,vi_mlp_out,decoder_mlp1_out ,decoder_mlp1_out ]
     models = MRVAEDA(input_dim,hidden_dim,categorical_dim,device).to(device)
     optimizer = torch.optim.Adam(models.parameters(), lr=3e-3)
     scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer,np.arange(1,args.batch_size,args.batch_size//4), gamma=0.1, last_epoch=-1)

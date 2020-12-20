@@ -72,7 +72,11 @@ class VI(nn.Module):
             H :: shape [node_pair_num,hidden_dim[1]]
         '''
         if self.type == 'Norm':
-            pass
+            mean = self.mean(H)  # [node_pair_num,dN]
+            logstd = self.logstd(H)
+            gausian_noise = torch.randn_like(mean)
+            N = gausian_noise*torch.exp(logstd) + mean   # [node_pair_num,dN]
+            return N,mean,logstd
         if self.type == 'Both':
             mean = self.mean(H)  # [node_pair_num,dn*cat_dim]
             logstd = self.logstd(H)
@@ -87,7 +91,7 @@ class VI(nn.Module):
             Z = nn.functional.softmax((q+gumbel)/temp,dim=-1) # [node_pair_num,catdim]
             Z = Z.view(-1,1,self.cat)  # [node_pair_num,1,cat_dim]
             M = torch.matmul(Z,N).squeeze() #[node_pair_num,dn]  
-        return M,mean,logstd,q
+            return M,mean,logstd,q
 
 class shared_decoder(nn.Module):
     def __init__(self,in_feats,out_dim,**kwargs):

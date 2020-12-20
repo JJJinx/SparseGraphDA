@@ -33,12 +33,13 @@ class MRVAEDA(torch.nn.Module):
         self.private_encoder_source = private_encoder(in_dim,hidden_dim[0])
         self.private_encoder_target = private_encoder(in_dim,hidden_dim[0])
         self.shared_encoder = shared_encoder(hidden_dim[0],hidden_dim[1])
-        self.VI = VI(hidden_dim[1],hidden_dim[2],categorical_dim,device,distype='Both',**kwargs)
-        self.shared_decoder = shared_decoder(hidden_dim[3],hidden_dim[4])
-        self.private_decoder_source = private_decoder(hidden_dim[4],hidden_dim[5],in_dim) # 2layers
-        self.private_decoder_target = private_decoder(hidden_dim[4],hidden_dim[5],in_dim) # 2layers
-        self.A_classifier = relation_classifier(hidden_dim[3],hidden_dim[3]//2,categorical_dim) #classify the node pair's class
-        self.discriminator = discriminator(hidden_dim[3],hidden_dim[3]//2)
+
+        self.shared_decoder = shared_decoder(hidden_dim[1],hidden_dim[2])
+        self.private_decoder_source = private_decoder(hidden_dim[2],hidden_dim[3],in_dim) # 2layers
+        self.private_decoder_target = private_decoder(hidden_dim[2],hidden_dim[3],in_dim) # 2layers
+
+        self.A_classifier = relation_classifier(hidden_dim[1],hidden_dim[1]//2,categorical_dim) #classify the node pair's class
+        self.discriminator = discriminator(hidden_dim[1],hidden_dim[1]//2)
     def forward(self, x, edge_index,node_pair,domain,rate):
         '''
             x :: shape [node_num,feat_dim]
@@ -55,17 +56,16 @@ class MRVAEDA(torch.nn.Module):
         # h_src = h_src.unsqueeze(0).repeat(h.shape[0],1,1) #[N_i,N_j,Dh]
         # h_dst = h_dst.unsqueeze(1).repeat(1,h.shape[0],1) #[N_i,N_j,Dh]
         hadd = h[node_pair[:,0]]+h[node_pair[:,1]]
-        M,mean,logstd,q = self.VI(hadd,temp = 0.5)
-        x_recon = self.shared_decoder(M)
+        x_recon = self.shared_decoder(hadd)
         if domain == 'source':
             x_recon = self.private_decoder_source(x_recon)
         if domain == 'target':
             x_recon = self.private_decoder_target(x_recon)
 
-        A_pred = self.A_classifier(M)
-        domain_pred = self.discriminator(M,rate)
+        A_pred = self.A_classifier(hadd)
+        domain_pred = self.discriminator(hadd,rate)
 
-        return x_recon,A_pred,domain_pred,mean,logstd,q
+        return x_recon,A_pred,domain_pred
 
 class FocalLoss(nn.Module):
     def __init__(self, gamma=0, alpha=None, size_average=True):
