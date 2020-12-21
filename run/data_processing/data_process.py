@@ -137,8 +137,6 @@ def generate_mapping_M_minus_class(node_label_num,np_type_num,pos_np_type_num):
             mapping_M[np_type,src] =1
     
     mapping_M[pos_np_type_num:,:] = mapping_M[:pos_np_type_num,:]
-    print(mapping_M)
-    raise RuntimeError
     return mapping_M
 
 
@@ -155,5 +153,5 @@ if __name__ == "__main__":
     #         ntype_etype_mapping[tgt_node_type,src_node_type] = i
     #         i+=1
     max_np_label,node_pair_label,max_pos_np_label,max_neg_np_label = generate_all_node_pair_minus_class(5,edge_index,node_label,3,g.adjacency_matrix())
-    M = generate_mapping_M_minus_class(3,12,6)
+    M = generate_mapping_M_minus_class(4,20,10)
     #print(node_pair_label,max_np_label)
