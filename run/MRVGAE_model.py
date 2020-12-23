@@ -97,7 +97,7 @@ class VI(nn.Module):
 #现在这个还没有像relearn那样多一个encoder1出来
 class VI_relearn(nn.Module):
     def __init__(self,in_dim,out_dim,categorical_dim,device):
-        super(VI,self).__init__()
+        super(VI_relearn,self).__init__()
         self.device = device
         self.out_dim = out_dim
         self.cat = categorical_dim
@@ -108,7 +108,7 @@ class VI_relearn(nn.Module):
 
         self.mlp = nn.Sequential(nn.Linear(in_dim, in_dim//2),
                                  nn.ReLU(inplace=True), # inplace 节约空间
-                                 nn.Linear(in_dim//2, out_dim))
+                                 nn.Linear(in_dim//2, categorical_dim))
         self.dropout = nn.Dropout(0.5)
 
     def forward(self,G,temp):
@@ -119,7 +119,7 @@ class VI_relearn(nn.Module):
         GMM = self.mean+self.logstd.exp() * std_norm
         GMM = self.dropout(GMM)
         H0 = z @ GMM  # @ is matrix mul
-        return H0
+        return H0,z
 
 
 class shared_decoder(nn.Module):
