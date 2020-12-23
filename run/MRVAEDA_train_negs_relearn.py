@@ -220,7 +220,7 @@ if __name__ == "__main__":
     parser.add_argument("--source", type=str, default='acm')
     parser.add_argument("--target", type=str, default='dblp')
     parser.add_argument("--seed", type=int,default=200)
-    parser.add_argument("--lr", type=float,default=0.001)
+    parser.add_argument("--lr", type=float,default=0.0001)
     parser.add_argument("--epochs", type=int,default=500)
     parser.add_argument("--batch_size", type=int,default=65536)
 
