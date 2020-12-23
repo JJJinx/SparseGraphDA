@@ -1,6 +1,7 @@
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 import dgl
 import dgl.nn.pytorch as dglnn
 from layers import CachedGCNConv
@@ -33,7 +34,7 @@ class private_encoder(nn.Module):
         super(private_encoder,self).__init__()
         self.gcn = CachedGCNConv(in_feats,out_dim)
         self.dropout = nn.Dropout(0.5)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x,edge_index,cache_name):
         x = self.gcn(x,edge_index,cache_name)
         x = self.relu(x)
@@ -44,7 +45,7 @@ class shared_encoder(nn.Module):
     def __init__(self,in_feats,out_dim,**kwargs):
         super(shared_encoder,self).__init__()
         self.gcn = CachedGCNConv(in_feats,out_dim)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x,edge_index,cache_name):
         x = self.gcn(x,edge_index,cache_name)
         x = self.relu(x)
@@ -93,11 +94,39 @@ class VI(nn.Module):
             M = torch.matmul(Z,N).squeeze() #[node_pair_num,dn]  
             return M,mean,logstd,q
 
+#现在这个还没有像relearn那样多一个encoder1出来
+class VI_relearn(nn.Module):
+    def __init__(self,in_dim,out_dim,categorical_dim,device):
+        super(VI,self).__init__()
+        self.device = device
+        self.out_dim = out_dim
+        self.cat = categorical_dim
+
+        self.mean   = nn.Parameter(torch.FloatTensor(categorical_dim, out_dim).uniform_(-0.5 / out_dim, 0.5 / out_dim)) # init the mean of GMM
+        self.logstd = nn.Parameter(torch.FloatTensor(categorical_dim, out_dim).uniform_(-0.5 / out_dim, 0.5 / out_dim)) # init the logstd of GMM
+        self.stdnorm = torch.distributions.Normal(torch.zeros(categorical_dim, out_dim), torch.ones(categorical_dim, out_dim)) # standard norm distribution
+
+        self.mlp = nn.Sequential(nn.Linear(in_dim, in_dim//2),
+                                 nn.ReLU(inplace=True), # inplace 节约空间
+                                 nn.Linear(in_dim//2, out_dim))
+        self.dropout = nn.Dropout(0.5)
+
+    def forward(self,G,temp):
+        # gumbel
+        z = F.gumbel_softmax(self.mlp(G),tau=temp,hard=False)
+        # GMM
+        std_norm = self.stdnorm.sample().to(self.device)
+        GMM = self.mean+self.logstd.exp() * std_norm
+        GMM = self.dropout(GMM)
+        H0 = z @ GMM  # @ is matrix mul
+        return H0
+
+
 class shared_decoder(nn.Module):
     def __init__(self,in_feats,out_dim,**kwargs):
         super(shared_decoder,self).__init__()
         self.mlp = nn.Linear(in_feats,out_dim) 
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x):
         x = self.mlp(x)
         x = self.relu(x)
@@ -108,7 +137,7 @@ class private_decoder(nn.Module):
         super(private_decoder,self).__init__()
         self.mlp1 = nn.Linear(in_feats,hid_dim) 
         self.mlp2 = nn.Linear(hid_dim,out_dim)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x):
         x = self.mlp1(x)
         x = self.relu(x)
@@ -121,7 +150,7 @@ class relation_classifier(nn.Module):
         super(relation_classifier,self).__init__()
         self.mlp1 = nn.Linear(in_feats,hidden_dim) 
         self.mlp2 = nn.Linear(hidden_dim,out_dim)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x):
         x = self.mlp1(x)
         x = self.relu(x)
@@ -135,7 +164,7 @@ class discriminator(nn.Module):
         self.grl = GRL()
         self.mlp1 = nn.Linear(in_feats,hidden_dim) 
         self.mlp2 = nn.Linear(hidden_dim,2)
-        self.relu = nn.ReLU()
+        self.relu = nn.ReLU(inplace=True)
     def forward(self,x,rate):
         x = self.grl(x,rate)
         x = self.mlp1(x)
