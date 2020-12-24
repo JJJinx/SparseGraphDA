@@ -17,6 +17,18 @@ from data_processing.DomainData import DomainData
 from data_processing.data_process import *
 from MRVGAE_model import *
 
+def parse_args():
+    parser = ArgumentParser()
+    parser.add_argument("--device", type=str, default='cuda') #torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    parser.add_argument("--source", type=str, default='acm')
+    parser.add_argument("--target", type=str, default='dblp')
+    parser.add_argument("--seed", type=int,default=200)
+    parser.add_argument("--lr", type=float,default=0.0001)
+    parser.add_argument("--epochs", type=int,default=500)
+    parser.add_argument("--batch_size", type=int,default=16)
+
+    return parser.parse_args()
+
 class Node_Pair_Dataset(Dataset):
     def __init__(self,node_pairs,node_pair_labels):
         super(Node_Pair_Dataset, self).__init__()
@@ -202,47 +214,26 @@ def evaluate(np_pred,np_label,mapping_matrix,node_label):
 def validate(models,dataloader,all_node_pair_label,mapping_matrix,node_feat,node_label,edge_index,domain,device,rate):
     models.eval()
     np_pred = torch.tensor([])
-    for batch_np,_ in dataloader:
+    for batch_np,batch_np_label in dataloader:
         #_,np_pred_temp,_,_,_ = models(node_feat.to(device),edge_index.to(device),batch_np.to(device),domain,rate)
         output,H0,z = models(node_feat.to(device), edge_index.to(device),batch_np.to(device),'source','link',rate)
         np_pred = torch.cat((np_pred,output.cpu().detach()),dim=0)
+        #batch_np_acc,batch_node_acc = evaluate(output.cpu().detach(),batch_np_label.view(-1),mapping_matrix,node_label)
     node_pair_acc,node_acc = evaluate(np_pred,all_node_pair_label.view(-1),mapping_matrix,node_label)# all node pair label is [N,N] 
     return node_acc,node_pair_acc 
 
 
 
 if __name__ == "__main__":
-    ###################################################
-    ######                args                #########
-    ###################################################
-    device = 'cuda'#torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    parser = ArgumentParser()
-    parser.add_argument("--source", type=str, default='acm')
-    parser.add_argument("--target", type=str, default='dblp')
-    parser.add_argument("--seed", type=int,default=200)
-    parser.add_argument("--lr", type=float,default=0.0001)
-    parser.add_argument("--epochs", type=int,default=500)
-    parser.add_argument("--batch_size", type=int,default=65536)
-
-    args = parser.parse_args()
-    seed = args.seed
-
+    args = parse_args()
     id = "source: {}, target: {}, seed: {}"\
-        .format(args.source, args.target, seed)
+        .format(args.source, args.target, args.seed)
     print(id)
 
     # random.seed(seed)
     # np.random.seed(seed)
     # torch.manual_seed(seed)
     ## input data
-    '''
-    dataset 
-        :: x node feature
-        :: y node label min=0 max=5
-        :: edge_index node pair for existing edge, start from 0
-        :: train_mask mask for nodes
-        :: test_mask mask for nodes
-    '''
     dataset = DomainData("data/{}".format(args.source), name=args.source)
     source_data = dataset[0]
     # dataset = DomainData("data/{}".format(args.target), name=args.target)
@@ -320,7 +311,7 @@ if __name__ == "__main__":
             train(epoch,models,source_node_feat.to(device),src_edge_index_sl.to(device),src_all_node_pair_label,device,mode,rate,args)
 
 
-        if (epoch+1) %10 == 0:
+        if (epoch+1) %30 == 0:
             ## validate
             src_node_acc,src_node_pair_acc=validate(models,src_dataloader,src_all_node_pair_label,mapping_matrix,
                                                     source_node_feat,source_node_label,src_edge_index_sl,

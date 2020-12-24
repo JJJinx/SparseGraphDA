@@ -22,13 +22,13 @@ from util.data_vis import degree_level_acc
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 parser = ArgumentParser()
-parser.add_argument("--source", type=str, default='dblp')
-parser.add_argument("--target", type=str, default='del_acm0.6_1')
+parser.add_argument("--source", type=str, default='del_acm0.2_1')
+parser.add_argument("--target", type=str, default='acm')
 parser.add_argument("--name", type=str, default='UDAGCN')
 parser.add_argument("--seed", type=int,default=200)
 parser.add_argument("--UDAGCN", type=bool,default=True)
 parser.add_argument("--encoder_dim", type=int, default=16)
-parser.add_argument("--transfer", type=bool, default=True)
+parser.add_argument("--transfer", type=bool, default=False)
 
 
 args = parser.parse_args()
